@@ -415,7 +415,7 @@ def main():
         print("Error: No temp directory found. Run 01_prepare_env.py first.")
         sys.exit(1)
     
-    temp_dir = temp_dirs[0]
+    temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
     print(f"Using temp directory: {temp_dir}")
     
     # Load configuration

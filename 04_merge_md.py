@@ -34,6 +34,10 @@ def merge_markdown_files(temp_dir):
     """Merge all translated markdown files"""
     print("Merging translated markdown files...")
     
+    # Find all original pageXXXX.md files to check completeness
+    original_files = glob.glob(os.path.join(temp_dir, 'page*.md'))
+    original_files = [f for f in original_files if not os.path.basename(f).startswith('output_')]
+    
     # Find all output_pageXXXX.md files
     output_files = glob.glob(os.path.join(temp_dir, 'output_page*.md'))
     
@@ -41,10 +45,21 @@ def merge_markdown_files(temp_dir):
         print("Error: No translated markdown files found. Run 03_translate_md.py first.")
         sys.exit(1)
     
+    # Check if translation is complete
+    if len(output_files) < len(original_files):
+        missing_count = len(original_files) - len(output_files)
+        print(f"ERROR: Translation incomplete!")
+        print(f"  Original pages: {len(original_files)}")
+        print(f"  Translated pages: {len(output_files)}")
+        print(f"  Missing translations: {missing_count}")
+        print("\nPlease complete all page translations before merging.")
+        print("Run the translation step again to complete missing pages.")
+        sys.exit(1)
+    
     # Sort files naturally (page0001, page0002, etc.)
     output_files.sort(key=lambda x: natural_sort_key(os.path.basename(x)))
     
-    print(f"Found {len(output_files)} translated files to merge")
+    print(f"Found {len(output_files)} translated files to merge (complete set)")
     
     # Merge content
     merged_content = ""
@@ -198,7 +213,7 @@ def main():
         print("Error: No temp directory found. Run 01_prepare_env.py first.")
         sys.exit(1)
     
-    temp_dir = temp_dirs[0]
+    temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
     print(f"Using temp directory: {temp_dir}")
     
     # Load configuration

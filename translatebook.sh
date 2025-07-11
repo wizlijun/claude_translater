@@ -64,6 +64,7 @@ DESCRIPTION:
     Translates PDF, DOCX, or EPUB files to HTML using Claude CLI.
     Automatically runs all 7 steps in sequence.
     Creates and manages Python virtual environment automatically.
+    Uses Calibre for unified file conversion via HTMLZ format.
 
 USAGE:
     ${SCRIPT_NAME} [OPTIONS] INPUT_FILE
@@ -83,13 +84,17 @@ OPTIONS:
     -h, --help             Show this help message
 
 STEPS:
-    1. Environment preparation and parameter parsing
-    2. Split file to markdown and extract images
+    1. Environment preparation and parameter parsing (skipped for new conversion)
+    2. Split file to markdown and extract images (skipped for new conversion) 
     3. Translate markdown files using Claude API
     4. Merge translated markdown files
     5. Convert markdown to HTML with template
     6. Generate and insert table of contents
     7. Generate DOCX and EPUB files in temp directory
+
+NOTE:
+    For PDF/DOCX/EPUB files, steps 1-2 are replaced by Calibre HTMLZ conversion
+    which creates optimized markdown chunks ready for translation.
 
 EXAMPLES:
     # Basic usage
@@ -173,7 +178,7 @@ setup_venv() {
             pip install -r "$requirements_file"
         else
             log_info "Installing essential packages..."
-            pip install python-docx PyMuPDF ebooklib beautifulsoup4 lxml markdown Pillow pdf2image
+            pip install python-docx PyMuPDF ebooklib beautifulsoup4 lxml markdown Pillow pdf2image pypandoc
         fi
         
         if [[ $? -ne 0 ]]; then
@@ -208,6 +213,36 @@ check_dependencies() {
             exit 3
         fi
     done
+    
+    # Check for file conversion script and Calibre for all supported formats
+    if [[ "${INPUT_FILE}" == *.epub ]] || [[ "${INPUT_FILE}" == *.EPUB ]] || [[ "${INPUT_FILE}" == *.pdf ]] || [[ "${INPUT_FILE}" == *.PDF ]] || [[ "${INPUT_FILE}" == *.docx ]] || [[ "${INPUT_FILE}" == *.DOCX ]]; then
+        if [[ ! -f "${SCRIPT_DIR}/01_convert_to_htmlz.py" ]]; then
+            log_error "File converter not found: 01_convert_to_htmlz.py"
+            log_error "This script is required for PDF/DOCX/EPUB file processing"
+            exit 3
+        fi
+        
+        # Check for Calibre ebook-convert
+        local calibre_paths=(
+            "/Applications/calibre.app/Contents/MacOS/ebook-convert"
+            "/usr/bin/ebook-convert"
+            "/usr/local/bin/ebook-convert"
+        )
+        
+        local calibre_found=false
+        for path in "${calibre_paths[@]}"; do
+            if [[ -f "$path" ]]; then
+                calibre_found=true
+                break
+            fi
+        done
+        
+        if [[ "$calibre_found" == false ]] && ! command -v ebook-convert &> /dev/null; then
+            log_error "Calibre ebook-convert not found"
+            log_error "Please install Calibre: https://calibre-ebook.com/"
+            exit 3
+        fi
+    fi
     
     # Check Claude CLI availability
     if ! command -v claude &> /dev/null; then
@@ -404,6 +439,47 @@ main() {
     # Record start time
     local start_time=$(date +%s)
     
+    # Convert supported file formats using Calibre HTMLZ method
+    if [[ "${INPUT_FILE}" == *.epub ]] || [[ "${INPUT_FILE}" == *.EPUB ]] || [[ "${INPUT_FILE}" == *.pdf ]] || [[ "${INPUT_FILE}" == *.PDF ]] || [[ "${INPUT_FILE}" == *.docx ]] || [[ "${INPUT_FILE}" == *.DOCX ]]; then
+        log_info "Detected supported file format, converting via Calibre HTMLZ..."
+        
+        local original_file="$INPUT_FILE"
+        
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "[DRY RUN] Would convert file to markdown chunks: $original_file"
+        else
+            # Ensure virtual environment is activated
+            local venv_dir="${SCRIPT_DIR}/venv"
+            if [[ -d "$venv_dir" ]]; then
+                source "$venv_dir/bin/activate"
+            fi
+            
+            # Check if 01_convert_to_htmlz.py exists
+            if [[ ! -f "${SCRIPT_DIR}/01_convert_to_htmlz.py" ]]; then
+                log_error "File converter not found: 01_convert_to_htmlz.py"
+                exit 3
+            fi
+            
+            # Convert file using new method
+            local convert_cmd="python3 ${SCRIPT_DIR}/01_convert_to_htmlz.py \"$original_file\" -l \"$INPUT_LANG\" --olang \"$OUTPUT_LANG\" -o \"$OUTPUT_FILE\""
+            
+            if [[ "$VERBOSE" == true ]]; then
+                log_info "Executing: $convert_cmd"
+            fi
+            
+            if ! eval $convert_cmd; then
+                log_error "File conversion failed"
+                exit 1
+            fi
+            
+            log_success "File converted to markdown chunks successfully"
+            
+            # The conversion creates a temp directory with markdown files
+            # Skip step 1 and 2 since conversion is already done
+            STEP_START=3
+        fi
+    fi
+    
     # Execute steps
     local step_descriptions=(
         "Environment preparation and parameter parsing"
@@ -477,6 +553,7 @@ main() {
                     
                     if ! eval $cmd; then
                         log_error "Step 3 failed: ${step_descriptions[2]}"
+                        log_error "Translation is incomplete. Please fix the issues and run again."
                         exit 1
                     fi
                     

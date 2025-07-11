@@ -23,7 +23,7 @@ def load_config(temp_dir):
         # Try to find config in current directory temp folders
         temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp')]
         if temp_dirs:
-            config_file = os.path.join(temp_dirs[0], 'config.txt')
+            config_file = os.path.join(max(temp_dirs, key=lambda d: os.path.getmtime(d)), 'config.txt')
     
     if not os.path.exists(config_file):
         print("Warning: config.txt not found. Using default settings.")
@@ -434,7 +434,7 @@ def main():
     temp_dir = None
     temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp')]
     if temp_dirs:
-        temp_dir = temp_dirs[0]
+        temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
         print(f"Using temp directory: {temp_dir}")
     
     # Load configuration

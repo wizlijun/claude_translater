@@ -85,7 +85,7 @@ IMPORTANT REQUIREMENTS:
 5. 使用 Sonnet 4 模型完成，保证格式和语义准确翻译内容自然流畅
 6.	只输出翻译后的正文内容，不要有任何说明、提示、注释或对话内容。
 输出的markdown文本 前面加上一行 <!-- START -->，结尾加上一行<!-- END -->
-7.  表达清晰简洁，不要使用复杂的句式
+7.  表达清晰简洁，不要使用复杂的句式。请严格按顺序翻译，不要跳过任何内容。
 8.  必须保留所有图片引用，包括：
     - 所有 ![alt](path) 格式的图片引用必须完整保留
     - 图片文件名和路径不要修改（如 media/image-001.png）
@@ -134,11 +134,6 @@ def translate_with_claude_cli(text, output_lang, custom_prompt=None, max_retries
             # Start Claude process
             command = ['claude']
             
-            # Set environment variables to skip interactive prompts
-            env = os.environ.copy()
-            env['CLAUDE_NON_INTERACTIVE'] = '1'
-            env['CLAUDE_AUTO_APPROVE'] = '1'
-            
             process = subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
@@ -147,8 +142,7 @@ def translate_with_claude_cli(text, output_lang, custom_prompt=None, max_retries
                 text=True,
                 encoding='utf-8',
                 bufsize=1,
-                universal_newlines=True,
-                env=env
+                universal_newlines=True
             )
             
             # Send input to Claude
@@ -358,7 +352,7 @@ def main():
         if not temp_dirs:
             print("Error: No temp directory found. Run 01_prepare_env.py first.")
             sys.exit(1)
-        temp_dir = temp_dirs[0]
+        temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
     
     print(f"Using temp directory: {temp_dir}")
     

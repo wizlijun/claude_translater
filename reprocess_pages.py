@@ -10,14 +10,15 @@ def main():
     """Reprocess the pages using the improved split_pdf_with_pymupdf"""
     try:
         # Add current directory to path
-        sys.path.insert(0, '/Users/bruce/git/claudetranslatebook')
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, current_dir)
         
         # Import the updated function
         from 02_split_to_md import split_pdf_with_pymupdf
         
         # Process just a few pages to test
-        temp_dir = "/Users/bruce/git/claudetranslatebook/bow_temp"
-        input_file = "/Users/bruce/git/claudetranslatebook/bow.pdf"
+        temp_dir = os.path.join(current_dir, "temp")
+        input_file = os.path.join(current_dir, "input.pdf")
         
         print("Testing improved PDF extraction...")
         

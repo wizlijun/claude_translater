@@ -35,7 +35,7 @@ def test_pandoc_availability():
 
 def test_pdf_to_html_conversion():
     """Test PDF to HTML conversion"""
-    input_file = "/Users/bruce/git/claudetranslatebook/bow.pdf"
+    input_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input.pdf")
     
     if not os.path.exists(input_file):
         print(f"✗ Test PDF file not found: {input_file}")
@@ -106,7 +106,7 @@ def test_pdf_to_html_conversion():
 
 def test_html_to_markdown_conversion():
     """Test HTML to Markdown conversion"""
-    input_file = "/Users/bruce/git/claudetranslatebook/bow.pdf"
+    input_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input.pdf")
     
     if not os.path.exists(input_file):
         print(f"✗ Test PDF file not found: {input_file}")

@@ -27,8 +27,59 @@ def load_config(temp_dir):
     return config
 
 
+def convert_to_pdf_calibre(input_file, output_file):
+    """Convert EPUB/DOCX to PDF using Calibre's ebook-convert"""
+    # Check if ebook-convert is available
+    ebook_convert_paths = [
+        'ebook-convert',  # In PATH
+        '/Applications/calibre.app/Contents/MacOS/ebook-convert',  # macOS
+        '/usr/bin/ebook-convert',  # Linux
+        '/usr/local/bin/ebook-convert'  # Linux alternative
+    ]
+    
+    ebook_convert_cmd = None
+    for path in ebook_convert_paths:
+        try:
+            result = subprocess.run([path, '--version'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                ebook_convert_cmd = path
+                break
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    
+    if ebook_convert_cmd is None:
+        raise Exception("ebook-convert not found. Please install Calibre:\n"
+                       "  macOS: brew install --cask calibre\n"
+                       "  Linux: sudo apt-get install calibre\n"
+                       "  Windows: Download from https://calibre-ebook.com/download")
+    
+    # Get absolute paths
+    input_abs = os.path.abspath(input_file)
+    output_abs = os.path.abspath(output_file)
+    
+    # ebook-convert command
+    cmd = [
+        ebook_convert_cmd,
+        input_abs,
+        output_abs
+    ]
+    
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
+        
+        if not os.path.exists(output_file):
+            raise Exception("ebook-convert conversion failed - output file not created")
+            
+    except subprocess.TimeoutExpired:
+        raise Exception("ebook-convert conversion timed out")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"ebook-convert conversion failed: {e.stderr}")
+    except Exception as e:
+        raise Exception(f"ebook-convert error: {str(e)}")
+
+
 def convert_to_pdf_libreoffice(input_file, output_file):
-    """Convert DOCX/EPUB to PDF using LibreOffice"""
+    """Convert DOCX/EPUB to PDF using LibreOffice (fallback)"""
     libreoffice_paths = [
         '/Applications/LibreOffice.app/Contents/MacOS/soffice',  # macOS
         '/usr/bin/libreoffice',  # Linux
@@ -92,10 +143,13 @@ def pdf_to_html_with_pdftohtml(pdf_file, temp_dir):
     """Convert PDF to HTML using pdftohtml with default parameters"""
     print("working...")
     
-    # Copy input file to temp directory as input.pdf
+    # Copy input file to temp directory as input.pdf (only if not already there)
     input_pdf = os.path.join(temp_dir, 'input.pdf')
-    shutil.copy2(pdf_file, input_pdf)
-    print(f"  Copied input file to: {input_pdf}")
+    if os.path.abspath(pdf_file) != os.path.abspath(input_pdf):
+        shutil.copy2(pdf_file, input_pdf)
+        print(f"  Copied input file to: {input_pdf}")
+    else:
+        print(f"  Using existing input file: {input_pdf}")
     
     # Change to temp directory so output files are created there
     original_cwd = os.getcwd()
@@ -581,11 +635,22 @@ def split_epub_to_md(input_file, temp_dir):
         shutil.copy2(input_file, input_epub)
         print(f"  Copied input file to: {input_epub}")
         
-        # Step 1: Convert EPUB to PDF using LibreOffice
+        # Step 1: Convert EPUB to PDF using Calibre (preferred) or LibreOffice (fallback)
         temp_pdf = os.path.join(temp_dir, 'input.pdf')
         print("Converting EPUB to PDF...")
-        convert_to_pdf_libreoffice(input_epub, temp_pdf)
-        print("✓ Successfully converted EPUB to PDF")
+        
+        # Try Calibre first
+        try:
+            convert_to_pdf_calibre(input_epub, temp_pdf)
+            print("✓ Successfully converted EPUB to PDF using Calibre")
+        except Exception as e:
+            print(f"Calibre conversion failed: {e}")
+            print("Falling back to LibreOffice...")
+            try:
+                convert_to_pdf_libreoffice(input_epub, temp_pdf)
+                print("✓ Successfully converted EPUB to PDF using LibreOffice")
+            except Exception as e2:
+                raise Exception(f"Both Calibre and LibreOffice conversion failed:\nCalibre: {e}\nLibreOffice: {e2}")
         
         # Step 2: Process the PDF using the same workflow
         base_name = pdf_to_html_with_pdftohtml(temp_pdf, temp_dir)
@@ -621,7 +686,8 @@ def main():
         print("Error: No temp directory found. Run 01_prepare_env.py first.")
         sys.exit(1)
     
-    temp_dir = temp_dirs[0]
+    # Use the most recently modified temp directory (likely the current one)
+    temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
     print(f"Using temp directory: {temp_dir}")
     
     # Load configuration
