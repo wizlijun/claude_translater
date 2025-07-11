@@ -13,6 +13,7 @@ import json
 import subprocess
 from bs4 import BeautifulSoup
 import shutil
+import glob
 
 
 def load_config(temp_dir):
@@ -700,6 +701,22 @@ def main():
     if not os.path.exists(input_file):
         print(f"Error: Input file '{input_file}' not found")
         sys.exit(1)
+    
+    # Check if input.md already exists - skip conversion if it does
+    input_md = os.path.join(temp_dir, 'input.md')
+    if os.path.exists(input_md):
+        print(f"✓ Skipping file conversion - input.md already exists")
+        # Check if page files exist
+        page_files = glob.glob(os.path.join(temp_dir, 'page*.md'))
+        existing_pages = [f for f in page_files if not os.path.basename(f).startswith('output_')]
+        if existing_pages:
+            print(f"✓ Found {len(existing_pages)} existing page files, skipping split as well")
+        else:
+            print("✓ Splitting existing input.md into pages...")
+            split_md_by_separator_with_merge(input_md, temp_dir)
+        print("\n=== Step 2 Complete ===")
+        print("Next step: Run 03_translate_md.py")
+        return
     
     # Split based on file type
     if file_ext == '.pdf':

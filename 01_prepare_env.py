@@ -17,22 +17,7 @@ def create_temp_directory(input_file, clean=False):
     
     if os.path.exists(temp_dir):
         print(f"Temp directory {temp_dir} already exists")
-        if clean:
-            shutil.rmtree(temp_dir)
-            os.makedirs(temp_dir)
-            print(f"Cleaned and recreated {temp_dir}")
-        else:
-            # Check if running in interactive mode
-            if sys.stdin.isatty():
-                choice = input("Do you want to clean it? (y/n): ")
-                if choice.lower() == 'y':
-                    shutil.rmtree(temp_dir)
-                    os.makedirs(temp_dir)
-                    print(f"Cleaned and recreated {temp_dir}")
-                else:
-                    print(f"Using existing {temp_dir}")
-            else:
-                print(f"Using existing {temp_dir}")
+        print(f"Using existing {temp_dir}")
     else:
         os.makedirs(temp_dir)
         print(f"Created temp directory: {temp_dir}")

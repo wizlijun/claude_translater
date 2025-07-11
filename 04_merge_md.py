@@ -150,11 +150,16 @@ def try_pandoc_merge(md_file, temp_dir):
     
     # Try to create PDF output (optional)
     try:
-        print("  Creating PDF file...")
         pdf_file = os.path.join(temp_dir, 'output.pdf')
-        cmd = ['pandoc', md_file, '-o', pdf_file, '--pdf-engine=xelatex']
-        subprocess.run(cmd, check=True, capture_output=True)
-        print(f"  Created PDF: {pdf_file}")
+        if os.path.exists(pdf_file):
+            print(f"  Skipping PDF creation - file already exists: {pdf_file}")
+            file_size = os.path.getsize(pdf_file)
+            print(f"  Found existing PDF: {pdf_file} ({file_size:,} bytes)")
+        else:
+            print("  Creating PDF file...")
+            cmd = ['pandoc', md_file, '-o', pdf_file, '--pdf-engine=xelatex']
+            subprocess.run(cmd, check=True, capture_output=True)
+            print(f"  Created PDF: {pdf_file}")
     except:
         print("  PDF creation failed (xelatex may not be installed)")
 
@@ -218,6 +223,17 @@ def main():
     
     # Load configuration
     config = load_config(temp_dir)
+    
+    # Check if output.html already exists - skip translation if it does
+    output_html = os.path.join(temp_dir, 'output.html')
+    if os.path.exists(output_html):
+        print(f"✓ Skipping translation - output.html already exists")
+        print(f"  Found existing output.html: {output_html}")
+        file_size = os.path.getsize(output_html)
+        print(f"  File size: {file_size:,} bytes")
+        print("\n=== Step 4 Complete ===")
+        print("Next step: Run 05_md_to_html.py")
+        return
     
     # Merge markdown files
     merge_markdown_files(temp_dir)

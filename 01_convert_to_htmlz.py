@@ -11,6 +11,7 @@ import zipfile
 import shutil
 import tempfile
 import argparse
+import glob
 
 def find_calibre_convert():
     """Find ebook-convert command from Calibre installation"""
@@ -60,6 +61,70 @@ def convert_to_htmlz(input_file, htmlz_file, calibre_path):
     except Exception as e:
         print(f"✗ HTMLZ conversion error: {e}")
         return False
+
+def extract_metadata_from_htmlz(extract_dir):
+    """Extract metadata from metadata.opf file in HTMLZ"""
+    try:
+        import xml.etree.ElementTree as ET
+        
+        # Look for metadata.opf file
+        metadata_file = None
+        for root, dirs, files in os.walk(extract_dir):
+            for file in files:
+                if file.lower() == 'metadata.opf':
+                    metadata_file = os.path.join(root, file)
+                    break
+            if metadata_file:
+                break
+        
+        if not metadata_file:
+            print("ℹ No metadata.opf found in HTMLZ")
+            return {}
+        
+        print(f"✓ Found metadata file: {metadata_file}")
+        
+        # Parse the OPF file
+        tree = ET.parse(metadata_file)
+        root = tree.getroot()
+        
+        # Define namespaces commonly used in OPF files
+        namespaces = {
+            'opf': 'http://www.idpf.org/2007/opf',
+            'dc': 'http://purl.org/dc/elements/1.1/',
+            'dcterms': 'http://purl.org/dc/terms/'
+        }
+        
+        metadata = {}
+        
+        # Extract title
+        title_elem = root.find('.//dc:title', namespaces)
+        if title_elem is not None and title_elem.text:
+            metadata['title'] = title_elem.text.strip()
+            print(f"✓ Found title: {metadata['title']}")
+        
+        # Extract creator/author
+        creator_elem = root.find('.//dc:creator', namespaces)
+        if creator_elem is not None and creator_elem.text:
+            metadata['creator'] = creator_elem.text.strip()
+            print(f"✓ Found creator: {metadata['creator']}")
+        
+        # Extract publisher (optional)
+        publisher_elem = root.find('.//dc:publisher', namespaces)
+        if publisher_elem is not None and publisher_elem.text:
+            metadata['publisher'] = publisher_elem.text.strip()
+            print(f"✓ Found publisher: {metadata['publisher']}")
+        
+        # Extract language (optional)
+        language_elem = root.find('.//dc:language', namespaces)
+        if language_elem is not None and language_elem.text:
+            metadata['language'] = language_elem.text.strip()
+            print(f"✓ Found language: {metadata['language']}")
+        
+        return metadata
+        
+    except Exception as e:
+        print(f"⚠️ Error extracting metadata: {e}")
+        return {}
 
 def extract_htmlz(htmlz_file, temp_dir):
     """Extract HTMLZ file and return paths to HTML and images"""
@@ -123,22 +188,25 @@ def setup_temp_directory(input_file, html_file, images_dir):
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         temp_dir = f"{base_name}_temp"
         
-        # Clean existing temp directory
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        
+        # Create temp directory if it doesn't exist (don't remove existing files)
         os.makedirs(temp_dir, exist_ok=True)
         
-        # Copy HTML file as input.html
+        # Copy HTML file as input.html (skip if already exists)
         input_html = os.path.join(temp_dir, "input.html")
-        shutil.copy2(html_file, input_html)
-        print(f"✓ Copied HTML to: {input_html}")
+        if os.path.exists(input_html):
+            print(f"✓ Skipping HTML copy - input.html already exists")
+        else:
+            shutil.copy2(html_file, input_html)
+            print(f"✓ Copied HTML to: {input_html}")
         
         # Copy images directory if it exists
         if images_dir and os.path.exists(images_dir):
             target_images_dir = os.path.join(temp_dir, "images")
-            shutil.copytree(images_dir, target_images_dir)
-            print(f"✓ Copied images to: {target_images_dir}")
+            if os.path.exists(target_images_dir):
+                print(f"✓ Skipping images copy - images directory already exists")
+            else:
+                shutil.copytree(images_dir, target_images_dir)
+                print(f"✓ Copied images to: {target_images_dir}")
         
         print(f"✓ Temp directory setup complete: {temp_dir}")
         return temp_dir
@@ -277,7 +345,7 @@ def split_markdown_by_size(md_file, temp_dir, target_size=6000):
         print(f"✗ Error splitting markdown: {e}")
         return 0
 
-def create_config_file(temp_dir, input_file, input_lang, output_lang, output_file):
+def create_config_file(temp_dir, input_file, input_lang, output_lang, output_file, metadata=None):
     """Create config.txt file for the pipeline"""
     try:
         config_file = os.path.join(temp_dir, "config.txt")
@@ -290,10 +358,24 @@ output_file={output_file}
 conversion_method=calibre_htmlz
 """
         
+        # Add metadata if available
+        if metadata:
+            config_content += f"\n# Book Metadata\n"
+            if 'title' in metadata:
+                config_content += f"original_title={metadata['title']}\n"
+            if 'creator' in metadata:
+                config_content += f"creator={metadata['creator']}\n"
+            if 'publisher' in metadata:
+                config_content += f"publisher={metadata['publisher']}\n"
+            if 'language' in metadata:
+                config_content += f"source_language={metadata['language']}\n"
+        
         with open(config_file, 'w', encoding='utf-8') as f:
             f.write(config_content)
         
         print(f"✓ Created config file: {config_file}")
+        if metadata:
+            print(f"✓ Cached metadata: title={metadata.get('title', 'N/A')}, creator={metadata.get('creator', 'N/A')}")
         return True
         
     except Exception as e:
@@ -341,6 +423,67 @@ def main():
     htmlz_file = f"{os.path.splitext(input_file)[0]}.htmlz"
     
     try:
+        # Check if input.html already exists in temp directory - skip entire conversion if it does
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        temp_dir = f"{base_name}_temp"
+        input_html_path = os.path.join(temp_dir, "input.html")
+        
+        if os.path.exists(input_html_path):
+            print(f"✓ Skipping HTMLZ conversion - input.html already exists: {input_html_path}")
+            file_size = os.path.getsize(input_html_path)
+            print(f"✓ Found existing input.html: {file_size} bytes")
+            
+            # Try to read existing metadata from config if available
+            metadata = {}
+            config_file = os.path.join(temp_dir, "config.txt")
+            if os.path.exists(config_file):
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if '=' in line:
+                                key, value = line.strip().split('=', 1)
+                                if key == 'original_title':
+                                    metadata['title'] = value
+                                elif key == 'creator':
+                                    metadata['creator'] = value
+                                elif key == 'publisher':
+                                    metadata['publisher'] = value
+                                elif key == 'source_language':
+                                    metadata['language'] = value
+                    if metadata:
+                        print(f"✓ Read cached metadata: title={metadata.get('title', 'N/A')}, creator={metadata.get('creator', 'N/A')}")
+                except Exception as e:
+                    print(f"⚠️ Could not read metadata from config: {e}")
+            
+            # Still need to check/create config and handle markdown splitting
+            # Step 4: Convert HTML to Markdown (skip if input.md already exists)
+            input_md = os.path.join(temp_dir, "input.md")
+            
+            if os.path.exists(input_md):
+                print(f"✓ Skipping HTML to Markdown conversion - input.md already exists")
+            else:
+                if not convert_html_to_markdown(input_html_path, input_md):
+                    sys.exit(1)
+            
+            # Step 5: Split markdown into chunks (skip if page files already exist)
+            page_files = glob.glob(os.path.join(temp_dir, 'page*.md'))
+            if page_files:
+                chunk_count = len([f for f in page_files if not os.path.basename(f).startswith('output_')])
+                print(f"✓ Skipping markdown splitting - found {chunk_count} existing page files")
+            else:
+                chunk_count = split_markdown_by_size(input_md, temp_dir, args.chunk_size)
+                if chunk_count == 0:
+                    sys.exit(1)
+            
+            # Step 6: Create config file
+            create_config_file(temp_dir, input_file, args.ilang, args.olang, args.output, metadata)
+            
+            print("\n" + "="*50)
+            print("✓ Conversion completed successfully!")
+            print(f"✓ Temp directory: {temp_dir}")
+            print(f"✓ Ready for translation pipeline")
+            return
+        
         # Step 1: Convert to HTMLZ
         if not convert_to_htmlz(input_file, htmlz_file, calibre_path):
             sys.exit(1)
@@ -352,25 +495,36 @@ def main():
             if not html_file:
                 sys.exit(1)
             
+            # Extract metadata from HTMLZ
+            metadata = extract_metadata_from_htmlz(extract_dir)
+            
             # Step 3: Setup temp directory
             temp_dir = setup_temp_directory(input_file, html_file, images_dir)
             if not temp_dir:
                 sys.exit(1)
             
-            # Step 4: Convert HTML to Markdown
+            # Step 4: Convert HTML to Markdown (skip if input.md already exists)
             input_html = os.path.join(temp_dir, "input.html")
             input_md = os.path.join(temp_dir, "input.md")
             
-            if not convert_html_to_markdown(input_html, input_md):
-                sys.exit(1)
+            if os.path.exists(input_md):
+                print(f"✓ Skipping HTML to Markdown conversion - input.md already exists")
+            else:
+                if not convert_html_to_markdown(input_html, input_md):
+                    sys.exit(1)
             
-            # Step 5: Split markdown into chunks
-            chunk_count = split_markdown_by_size(input_md, temp_dir, args.chunk_size)
-            if chunk_count == 0:
-                sys.exit(1)
+            # Step 5: Split markdown into chunks (skip if page files already exist)
+            page_files = glob.glob(os.path.join(temp_dir, 'page*.md'))
+            if page_files:
+                chunk_count = len([f for f in page_files if not os.path.basename(f).startswith('output_')])
+                print(f"✓ Skipping markdown splitting - found {chunk_count} existing page files")
+            else:
+                chunk_count = split_markdown_by_size(input_md, temp_dir, args.chunk_size)
+                if chunk_count == 0:
+                    sys.exit(1)
             
             # Step 6: Create config file
-            create_config_file(temp_dir, input_file, args.ilang, args.olang, args.output)
+            create_config_file(temp_dir, input_file, args.ilang, args.olang, args.output, metadata)
             
             print("\n" + "="*50)
             print("✓ Conversion completed successfully!")

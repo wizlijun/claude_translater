@@ -25,6 +25,62 @@ def log_warning(message):
     """Log warning message"""
     print(f"[WARNING] {message}")
 
+def translate_title_with_claude(title, target_lang):
+    """Translate book title using Claude CLI"""
+    if not title or not title.strip():
+        return title
+    
+    try:
+        import subprocess
+        
+        log_info(f"Translating title '{title}' to {target_lang}...")
+        
+        # Create translation prompt
+        lang_map = {
+            'zh': 'Chinese',
+            'en': 'English', 
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'fr': 'French',
+            'de': 'German',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian'
+        }
+        
+        target_lang_name = lang_map.get(target_lang.lower(), target_lang)
+        
+        prompt = f"""Please translate this book title to {target_lang_name}. 
+Only return the translated title, nothing else.
+Title: {title}"""
+        
+        # Run Claude CLI
+        process = subprocess.Popen(
+            ['claude'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        stdout, stderr = process.communicate(input=prompt, timeout=30)
+        
+        if process.returncode == 0 and stdout.strip():
+            translated_title = stdout.strip()
+            # Clean up any formatting markers
+            translated_title = translated_title.replace('**', '').replace('*', '').strip()
+            log_success(f"Title translated: '{title}' -> '{translated_title}'")
+            return translated_title
+        else:
+            log_warning(f"Title translation failed, using original: {stderr}")
+            return title
+            
+    except Exception as e:
+        log_warning(f"Error translating title: {e}, using original")
+        return title
+
 def load_config():
     """Load configuration from temp directory"""
     # Look for config files in current directory and temp directories
@@ -61,8 +117,19 @@ def load_config():
         log_warning(f"Could not read config file {config_file}: {e}")
         return None
 
-def generate_docx_with_script(html_file, temp_dir):
+def generate_docx_with_script(html_file, temp_dir, metadata=None):
     """Generate DOCX file using html2docx.sh script"""
+    # Create output filename in temp directory
+    html_name = os.path.splitext(os.path.basename(html_file))[0]
+    docx_file = os.path.join(temp_dir, f"{html_name}.docx")
+    
+    # Skip if DOCX already exists
+    if os.path.exists(docx_file):
+        log_info(f"Skipping DOCX generation - file already exists: {docx_file}")
+        file_size = os.path.getsize(docx_file)
+        log_success(f"Found existing DOCX: {docx_file} ({file_size} bytes)")
+        return docx_file
+    
     log_info("Generating DOCX file using html2docx.sh...")
     
     # Get script directory
@@ -73,11 +140,19 @@ def generate_docx_with_script(html_file, temp_dir):
         log_error(f"html2docx.sh script not found at: {docx_script}")
         return None
     
-    # Create output filename in temp directory
-    html_name = os.path.splitext(os.path.basename(html_file))[0]
-    docx_file = os.path.join(temp_dir, f"{html_name}.docx")
-    
     try:
+        # Create a metadata file for the script to use
+        if metadata and (metadata.get('title') or metadata.get('creator')):
+            metadata_file = os.path.join(temp_dir, 'book_metadata.env')
+            with open(metadata_file, 'w', encoding='utf-8') as f:
+                if metadata.get('title'):
+                    f.write(f'BOOK_TITLE="{metadata["title"]}"\n')
+                if metadata.get('creator'):
+                    f.write(f'BOOK_AUTHOR="{metadata["creator"]}"\n')
+                if metadata.get('publisher'):
+                    f.write(f'BOOK_PUBLISHER="{metadata["publisher"]}"\n')
+            log_info(f"Created metadata file for DOCX generation: {metadata_file}")
+        
         # Run html2docx.sh script with output filename
         cmd = [docx_script, html_file, docx_file]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -107,8 +182,19 @@ def generate_docx_with_script(html_file, temp_dir):
         log_error(f"Error running html2docx.sh: {e}")
         return None
 
-def generate_epub_with_script(html_file, temp_dir):
+def generate_epub_with_script(html_file, temp_dir, metadata=None):
     """Generate EPUB file using html2epub.sh script"""
+    # Create output filename in temp directory
+    html_name = os.path.splitext(os.path.basename(html_file))[0]
+    epub_file = os.path.join(temp_dir, f"{html_name}.epub")
+    
+    # Skip if EPUB already exists
+    if os.path.exists(epub_file):
+        log_info(f"Skipping EPUB generation - file already exists: {epub_file}")
+        file_size = os.path.getsize(epub_file)
+        log_success(f"Found existing EPUB: {epub_file} ({file_size} bytes)")
+        return epub_file
+    
     log_info("Generating EPUB file using html2epub.sh...")
     
     # Get script directory
@@ -119,11 +205,19 @@ def generate_epub_with_script(html_file, temp_dir):
         log_error(f"html2epub.sh script not found at: {epub_script}")
         return None
     
-    # Create output filename in temp directory
-    html_name = os.path.splitext(os.path.basename(html_file))[0]
-    epub_file = os.path.join(temp_dir, f"{html_name}.epub")
-    
     try:
+        # Create a metadata file for the script to use
+        if metadata and (metadata.get('title') or metadata.get('creator')):
+            metadata_file = os.path.join(temp_dir, 'book_metadata.env')
+            with open(metadata_file, 'w', encoding='utf-8') as f:
+                if metadata.get('title'):
+                    f.write(f'BOOK_TITLE="{metadata["title"]}"\n')
+                if metadata.get('creator'):
+                    f.write(f'BOOK_AUTHOR="{metadata["creator"]}"\n')
+                if metadata.get('publisher'):
+                    f.write(f'BOOK_PUBLISHER="{metadata["publisher"]}"\n')
+            log_info(f"Created metadata file for EPUB generation: {metadata_file}")
+        
         # Run html2epub.sh script with output filename
         cmd = [epub_script, html_file, epub_file]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -166,6 +260,18 @@ def main():
     # Get HTML file path from config
     html_file = config.get('output_file')
     temp_dir = config.get('temp_dir', 'temp')
+    output_lang = config.get('output_lang', 'zh')
+    
+    # Extract metadata
+    original_title = config.get('original_title', '')
+    creator = config.get('creator', '')
+    publisher = config.get('publisher', '')
+    
+    # Translate title if available
+    translated_title = ''
+    if original_title:
+        translated_title = translate_title_with_claude(original_title, output_lang)
+        log_info(f"Book metadata - Title: {translated_title}, Creator: {creator}")
     
     if not html_file:
         log_error("No output file specified in configuration.")
@@ -182,11 +288,20 @@ def main():
     # Ensure temp directory exists
     os.makedirs(temp_dir, exist_ok=True)
     
+    # Prepare metadata dictionary for generation scripts
+    book_metadata = {}
+    if translated_title:
+        book_metadata['title'] = translated_title
+    if creator:
+        book_metadata['creator'] = creator
+    if publisher:
+        book_metadata['publisher'] = publisher
+    
     # Generate DOCX file using script
-    docx_file = generate_docx_with_script(html_file, temp_dir)
+    docx_file = generate_docx_with_script(html_file, temp_dir, book_metadata)
     
     # Generate EPUB file using script
-    epub_file = generate_epub_with_script(html_file, temp_dir)
+    epub_file = generate_epub_with_script(html_file, temp_dir, book_metadata)
     
     # Report results
     if docx_file or epub_file:
