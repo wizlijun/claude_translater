@@ -1,0 +1,71 @@
+# Temporary directories
+*_temp/
+*_temp_*/
+temp/
+tmp/
+.tmp/
+
+# Large files (>1MB)
+*.epub
+*.pdf
+*.docx
+*.pptx
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+
+# Media files (usually large)
+media/
+images/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.webp
+*.mp4
+*.avi
+*.mov
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Output files
+output.*
+book_*.epub
+translated_*
+*_output.*
