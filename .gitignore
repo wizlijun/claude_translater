@@ -40,15 +40,7 @@ __pycache__/
 # Log files
 *.log
 
-# Media files (usually large)
-media/
-images/
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.svg
-*.webp
+# Large media files (videos only)
 *.mp4
 *.avi
 *.mov
