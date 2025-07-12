@@ -90,11 +90,23 @@ pip install python-pptx
 ./translatebook.sh document.docx  
 ./translatebook.sh ebook.epub
 
-# 带自定义提示的专业翻译
-./translatebook.sh bow.pdf -p "Bushcraft、石器打制领域的生僻词汇在翻译后加上(原词)，请逐行翻译，不要遗漏"
+# 指定目标语言翻译
+./translatebook.sh --olang en book.pdf
 
-# 指定输出语言和文件
-./translatebook.sh --olang en -o english_book.html book.pdf
+# 带自定义提示的专业翻译
+./translatebook.sh -p "Bushcraft、石器打制领域的生僻词汇在翻译后加上(原词)，请逐行翻译，不要遗漏" book.pdf
+
+# 清理临时目录并详细输出
+./translatebook.sh --clean -v book.epub
+
+# 只运行翻译步骤（3-4）
+./translatebook.sh --start-step 3 --end-step 4 book.docx
+
+# 只运行格式转换步骤（5-7）
+./translatebook.sh --start-step 5 --end-step 7 book.docx
+
+# 预览执行计划
+./translatebook.sh --dry-run book.pdf
 ```
 
 #### 新架构优势
@@ -154,12 +166,17 @@ page0001.md ~ page0042.md → Claude翻译 → 合并 → HTML → 目录 → �
 ## 参数说明
 
 ### translatebook.sh 主要参数
-- `--olang`: 目标语言（zh/en/ja等）
-- `-o, --output`: 输出HTML文件
+- `-l, --ilang`: 输入语言（默认：auto）
+- `--olang`: 目标语言（默认：zh）
 - `-p, --prompt`: 自定义翻译提示
-- `--start-step, --end-step`: 指定执行步骤（新架构自动从3开始）
+- `--clean`: 清理临时目录
+- `--no-skip`: 不跳过已存在的中间文件
+- `--reinstall-packages`: 重新安装Python包
+- `--start-step NUM`: 从指定步骤开始（1-7）
+- `--end-step NUM`: 在指定步骤结束（1-7）
 - `--dry-run`: 预览执行计划
 - `-v, --verbose`: 详细输出
+- `-h, --help`: 显示帮助信息
 
 ### 01_convert_to_htmlz.py 参数
 - `--chunk-size`: 分块大小（默认6000字符）

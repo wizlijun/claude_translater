@@ -15,7 +15,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT_FILE=""
 INPUT_LANG="auto"
 OUTPUT_LANG="zh"
-OUTPUT_FILE="output.html"
 CUSTOM_PROMPT=""
 CLEAN_TEMP=false
 SKIP_EXISTING=true
@@ -72,7 +71,6 @@ USAGE:
 OPTIONS:
     -l, --ilang LANG        Input language (default: auto)
     --olang LANG           Output language (default: zh)
-    -o, --output FILE      Output HTML file (default: output.html)
     -p, --prompt TEXT      Custom prompt for translation (step 3)
     --clean                Clean temp directory before starting
     --no-skip              Don't skip existing intermediate files
@@ -84,8 +82,8 @@ OPTIONS:
     -h, --help             Show this help message
 
 STEPS:
-    1. Environment preparation and parameter parsing (skipped for new conversion)
-    2. Split file to markdown and extract images (skipped for new conversion) 
+    1. Environment preparation and parameter parsing
+    2. Split file to markdown and extract images
     3. Translate markdown files using Claude API
     4. Merge translated markdown files
     5. Convert markdown to HTML with template
@@ -93,7 +91,7 @@ STEPS:
     7. Generate DOCX and EPUB files in temp directory
 
 NOTE:
-    For PDF/DOCX/EPUB files, steps 1-2 are replaced by Calibre HTMLZ conversion
+    For PDF/DOCX/EPUB files, steps 1-2 are automatically replaced by Calibre HTMLZ conversion
     which creates optimized markdown chunks ready for translation.
 
 EXAMPLES:
@@ -101,7 +99,7 @@ EXAMPLES:
     ${SCRIPT_NAME} book.pdf
 
     # Translate to English with custom output
-    ${SCRIPT_NAME} --olang en -o translated_book.html book.pdf
+    ${SCRIPT_NAME} --olang en book.pdf
 
     # Clean temp and run with verbose output
     ${SCRIPT_NAME} --clean -v book.epub
@@ -121,6 +119,7 @@ EXAMPLES:
 REQUIREMENTS:
     - Python 3.6+
     - Claude CLI (https://docs.anthropic.com/en/docs/claude-code)
+    - Calibre (for PDF/DOCX/EPUB support): https://calibre-ebook.com/
     - Internet connection (for initial package installation)
     
 NOTE:
@@ -266,10 +265,6 @@ parse_args() {
                 OUTPUT_LANG="$2"
                 shift 2
                 ;;
-            -o|--output)
-                OUTPUT_FILE="$2"
-                shift 2
-                ;;
             -p|--prompt)
                 CUSTOM_PROMPT="$2"
                 shift 2
@@ -403,7 +398,6 @@ show_config() {
     echo "  Input file: $INPUT_FILE"
     echo "  Input language: $INPUT_LANG"
     echo "  Output language: $OUTPUT_LANG"
-    echo "  Output file: $OUTPUT_FILE"
     echo "  Custom prompt: ${CUSTOM_PROMPT:-'None'}"
     echo "  Steps to run: $STEP_START-$STEP_END"
     echo "  Clean temp: $CLEAN_TEMP"
@@ -461,7 +455,7 @@ main() {
             fi
             
             # Convert file using new method
-            local convert_cmd="python3 ${SCRIPT_DIR}/01_convert_to_htmlz.py \"$original_file\" -l \"$INPUT_LANG\" --olang \"$OUTPUT_LANG\" -o \"$OUTPUT_FILE\""
+            local convert_cmd="python3 ${SCRIPT_DIR}/01_convert_to_htmlz.py \"$original_file\" -l \"$INPUT_LANG\" --olang \"$OUTPUT_LANG\""
             
             if [[ "$VERBOSE" == true ]]; then
                 log_info "Executing: $convert_cmd"
@@ -514,7 +508,7 @@ main() {
                 source "$venv_dir/bin/activate"
             fi
             
-            local cmd="python3 ${SCRIPT_DIR}/${step_scripts[0]} \"$INPUT_FILE\" -l \"$INPUT_LANG\" --olang \"$OUTPUT_LANG\" -o \"$OUTPUT_FILE\""
+            local cmd="python3 ${SCRIPT_DIR}/${step_scripts[0]} \"$INPUT_FILE\" -l \"$INPUT_LANG\" --olang \"$OUTPUT_LANG\""
             
             if [[ "$VERBOSE" == true ]]; then
                 log_info "Executing: $cmd"
@@ -559,6 +553,41 @@ main() {
                     
                     log_success "Step 3 completed: ${step_descriptions[2]}"
                 fi
+            elif [[ $i -eq 6 ]]; then
+                # Special handling for step 6 (TOC generation) with base_temp/book.html output
+                log_step "6" "${step_descriptions[5]}"
+                
+                if [[ "$DRY_RUN" == true ]]; then
+                    log_info "[DRY RUN] Would execute: python3 ${step_scripts[5]} with base_temp/book.html output"
+                else
+                    # Ensure virtual environment is activated before running Python scripts
+                    local venv_dir="${SCRIPT_DIR}/venv"
+                    if [[ -d "$venv_dir" ]]; then
+                        source "$venv_dir/bin/activate"
+                    fi
+                    
+                    # Use input file name to determine temp directory
+                    local base_temp_dir="${INPUT_FILE%.*}_temp"
+                    
+                    if [[ ! -d "$base_temp_dir" ]]; then
+                        log_error "Temp directory not found: $base_temp_dir"
+                        exit 1
+                    fi
+                    
+                    # Step 6 will process book.html in the temp directory directly
+                    local cmd="python3 ${SCRIPT_DIR}/${step_scripts[5]}"
+                    
+                    if [[ "$VERBOSE" == true ]]; then
+                        log_info "Executing: $cmd"
+                    fi
+                    
+                    if ! eval $cmd; then
+                        log_error "Step 6 failed: ${step_descriptions[5]}"
+                        exit 1
+                    fi
+                    
+                    log_success "Step 6 completed: ${step_descriptions[5]} -> ${base_temp_dir}/book.html"
+                fi
             else
                 execute_python_script "${step_scripts[$((i-1))]}" "$i" "${step_descriptions[$((i-1))]}"
             fi
@@ -577,13 +606,8 @@ main() {
     
     if [[ "$DRY_RUN" == false ]]; then
         echo -e "${GREEN}✓ Input file:${NC} $INPUT_FILE"
-        echo -e "${GREEN}✓ Output file:${NC} $OUTPUT_FILE"
         echo -e "${GREEN}✓ Execution time:${NC} ${duration}s"
-        
-        if [[ -f "$OUTPUT_FILE" ]]; then
-            local file_size=$(stat -f%z "$OUTPUT_FILE" 2>/dev/null || stat -c%s "$OUTPUT_FILE" 2>/dev/null || echo "unknown")
-            echo -e "${GREEN}✓ Output size:${NC} $file_size bytes"
-        fi
+        echo -e "${GREEN}✓ Files generated in temp directory:${NC} ${INPUT_FILE%.*}_temp/"
     else
         echo -e "${YELLOW}Note: This was a dry run. No files were modified.${NC}"
     fi
