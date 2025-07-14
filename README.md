@@ -2,6 +2,10 @@
 
 这是一个基于 Claude AI 的文档翻译工具集，支持多种文档格式的批量翻译。
 
+[![Version](https://img.shields.io/badge/version-v2.0-blue.svg)](https://github.com/your-username/claude_translater)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.6+-blue.svg)](https://python.org)
+
 ## 🎯 最新重大更新 v2.0
 
 ### 统一转换架构 - Calibre HTMLZ 方案
@@ -31,6 +35,29 @@ PDF/DOCX/EPUB → Calibre → HTMLZ → 解压 → HTML + Images
 
 ### 4. clean_markdown.py - Markdown清理工具
 清理转换后markdown文件中的换行符和格式问题。
+
+## 🚀 快速开始
+
+### 1. 安装依赖
+```bash
+# 安装 Calibre（必需）
+brew install --cask calibre  # macOS
+# 或者 sudo apt-get install calibre  # Linux
+
+# 安装 Claude CLI
+# 参考：https://docs.anthropic.com/en/docs/claude-code
+```
+
+### 2. 一键翻译
+```bash
+# 任何格式文档翻译（自动检测并优化转换）
+./translatebook.sh book.pdf
+./translatebook.sh document.docx  
+./translatebook.sh ebook.epub
+```
+
+### 3. 获取结果
+翻译完成后，在 `output/` 目录下获得 HTML 格式的翻译文档。
 
 ## 功能特点
 
@@ -184,23 +211,16 @@ page0001.md ~ page0042.md → Claude翻译 → 合并 → HTML → 目录 → �
 - `--olang`: 输出语言
 - `-o, --output`: 输出文件名
 
-## 故障排除
+## 🔧 故障排除
 
 ### 新架构常见问题
-1. **Calibre未安装**: 
-   ```bash
-   # macOS
-   brew install --cask calibre
-   # Linux  
-   sudo apt-get install calibre
-   ```
 
-2. **pypandoc缺失**:
-   ```bash
-   pip install pypandoc
-   ```
-
-3. **转换失败**: 检查文件格式和Calibre版本
+| 问题 | 解决方案 |
+|------|----------|
+| Calibre未安装 | `brew install --cask calibre` (macOS) 或 `sudo apt-get install calibre` (Linux) |
+| pypandoc缺失 | `pip install pypandoc` |
+| 转换失败 | 检查文件格式和Calibre版本 |
+| 权限问题 | 确保脚本有执行权限：`chmod +x translatebook.sh` |
 
 ### 调试建议
 ```bash
@@ -209,6 +229,10 @@ page0001.md ~ page0042.md → Claude翻译 → 合并 → HTML → 目录 → �
 
 # 单独测试转换
 python3 01_convert_to_htmlz.py book.pdf --chunk-size 5000
+
+# 检查环境
+which calibre  # 检查Calibre是否正确安装
+python3 -c "import pypandoc; print('pypandoc OK')"  # 检查pypandoc
 ```
 
 ## 性能优化
@@ -248,6 +272,30 @@ python3 01_convert_to_htmlz.py book.pdf --chunk-size 5000
 ✅ **状态**: 活跃开发中  
 🔄 **架构**: v2.0 Calibre HTMLZ 统一转换  
 🎯 **主要功能**: PDF/DOCX/EPUB → 中文翻译 → HTML输出  
+
+## 🤝 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+### 开发环境
+```bash
+git clone https://github.com/your-username/claude_translater.git
+cd claude_translater
+chmod +x translatebook.sh
+```
+
+### 测试
+```bash
+# 测试基本功能
+./translatebook.sh --dry-run test.pdf
+
+# 测试转换引擎
+python3 01_convert_to_htmlz.py test.pdf --chunk-size 5000
+```
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
