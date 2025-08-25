@@ -47,12 +47,6 @@ def parse_arguments():
         help="Output language (default: zh - Chinese)"
     )
     
-    parser.add_argument(
-        "-o", "--output",
-        default="output.html",
-        help="Output HTML file name (default: output.html)"
-    )
-    
     return parser.parse_args()
 
 def validate_input_file(input_file):
@@ -73,19 +67,11 @@ def validate_input_file(input_file):
 
 def save_config(temp_dir, args, file_ext):
     """Save configuration to temp directory for other scripts"""
-    # Generate output file path in temp directory
-    output_file = args.output
-    if not output_file.endswith('.html'):
-        output_file += '.html'
-    
-    # Put output file in temp directory
-    output_path = os.path.join(temp_dir, output_file)
     
     config = {
         'input_file': args.input_file,
         'input_lang': args.ilang,
         'output_lang': args.olang,
-        'output_file': output_path,
         'file_extension': file_ext,
         'temp_dir': temp_dir
     }
@@ -118,7 +104,6 @@ def main():
     print(f"Input file: {config['input_file']}")
     print(f"Input language: {config['input_lang']}")
     print(f"Output language: {config['output_lang']}")
-    print(f"Output file: {config['output_file']}")
     print(f"File type: {config['file_extension']}")
     print(f"Temp directory: {config['temp_dir']}")
     

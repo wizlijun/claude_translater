@@ -84,32 +84,42 @@ IMPORTANT REQUIREMENTS:
 4.	删除只有数字的行，那可能是页码
 5. 使用 Sonnet 4 模型完成，保证格式和语义准确翻译内容自然流畅
 6.	只输出翻译后的正文内容，不要有任何说明、提示、注释或对话内容。
-输出的markdown文本 前面加上一行 <!-- START -->，结尾加上一行<!-- END -->
-7.  表达清晰简洁，不要使用复杂的句式。请严格按顺序翻译，不要跳过任何内容。
-8.  必须保留所有图片引用，包括：
+7.  CRITICAL OUTPUT FORMAT: 你的回复必须严格遵循以下格式：
+    - 第一行必须是：<!-- START -->
+    - 然后是翻译后的markdown内容
+    - 最后一行必须是：<!-- END -->
+    - 不要在这些标记之前或之后添加任何说明、警告、代码块标记或其他内容
+    - 绝对不要输出任何markdown代码块标记（如```markdown或```）
+    - 不要输出任何解释性文字或元数据
+    - 不要输出"我来帮您翻译"、"以下是翻译结果"等开场白
+    - 不要输出任何关于翻译质量、注意事项的说明
+    - 严格按照：<!-- START -->[翻译内容]<!-- END --> 的格式输出
+    - 如果输出不符合此格式，系统将重新请求翻译
+8.  表达清晰简洁，不要使用复杂的句式。请严格按顺序翻译，不要跳过任何内容。
+9.  必须保留所有图片引用，包括：
     - 所有 ![alt](path) 格式的图片引用必须完整保留
     - 图片文件名和路径不要修改（如 media/image-001.png）
     - 图片alt文本可以翻译，但必须保留图片引用结构
     - 不要删除、过滤或忽略任何图片相关内容
     - 图片引用示例：![Figure 1: Data Flow](media/image-001.png) → ![图1：数据流](media/image-001.png)
-9.  智能识别和处理多级标题，按照以下规则添加markdown标记：
+10. 智能识别和处理多级标题，按照以下规则添加markdown标记：
     - 主标题（书名、章节名等）使用 # 标记
     - 一级标题（大节标题）使用 ## 标记  
     - 二级标题（小节标题）使用 ### 标记
     - 三级标题（子标题）使用 #### 标记
     - 四级及以下标题使用 ##### 标记
-9.  标题识别规则：
+11. 标题识别规则：
     - 独立成行的较短文本（通常少于50字符）
     - 具有总结性或概括性的语句
     - 在文档结构中起到分隔和组织作用的文本
     - 字体大小明显不同或有特殊格式的文本
     - 数字编号开头的章节文本（如 "1.1 概述"、"第三章"等）
-10. 标题层级判断：
+12. 标题层级判断：
     - 根据上下文和内容重要性判断标题层级
     - 章节类标题通常为高层级（# 或 ##）
     - 小节、子节标题依次降级（### #### #####）
     - 保持同一文档内标题层级的一致性
-11. 注意事项：
+13. 注意事项：
     - 不要过度添加标题标记，只对真正的标题文本添加
     - 正文段落不要添加标题标记
     - 如果原文已有markdown标题标记，保持其层级结构"""
@@ -180,30 +190,96 @@ def translate_with_claude_cli(text, output_lang, custom_prompt=None, max_retries
             if returncode == 0:
                 translated_text = stdout.strip()
                 
-                # Extract content between <!-- START --> and <!-- END --> markers
-                start_marker = '<!-- START -->'
-                end_marker = '<!-- END -->'
-                
-                start_idx = translated_text.find(start_marker)
-                end_idx = translated_text.find(end_marker)
-                
-                if start_idx != -1 and end_idx != -1:
-                    # Extract the content between markers
-                    content_start = start_idx + len(start_marker)
-                    extracted_content = translated_text[content_start:end_idx].strip()
+                # Strictly extract content between START and END markers
+                def extract_content_between_markers(text):
+                    """Strictly extract content between START and END markers"""
+                    start_marker = '<!-- START -->'
+                    end_marker = '<!-- END -->'
                     
-                    # Validate content is not empty
-                    if extracted_content and len(extracted_content.strip()) > 0:
-                        if attempt > 0:
-                            print(f"    ✓ Translation successful on attempt {attempt + 1}")
-                        return extracted_content
-                    else:
-                        print(f"    Attempt {attempt + 1}: Empty content between START/END markers - translation failed")
-                        continue  # Retry
+                    # Find the positions of markers
+                    start_pos = text.find(start_marker)
+                    end_pos = text.find(end_marker)
+                    
+                    if start_pos == -1:
+                        # Try to find markers with variations
+                        for variation in ['<!--START-->', '<!-- START-->', '<!--START -->', '<!-- START-->']:
+                            start_pos = text.find(variation)
+                            if start_pos != -1:
+                                start_marker = variation
+                                break
+                    
+                    if end_pos == -1:
+                        # Try to find markers with variations
+                        for variation in ['<!--END-->', '<!-- END-->', '<!--END -->', '<!-- END-->']:
+                            end_pos = text.find(variation)
+                            if end_pos != -1:
+                                end_marker = variation
+                                break
+                    
+                    if start_pos != -1 and end_pos != -1 and start_pos < end_pos:
+                        # Extract content between markers
+                        content_start = start_pos + len(start_marker)
+                        extracted = text[content_start:end_pos].strip()
+                        return extracted
+                    
+                    return None
+                
+                # Try to extract content
+                extracted_content = extract_content_between_markers(translated_text)
+                
+                if extracted_content and len(extracted_content.strip()) > 0:
+                    if attempt > 0:
+                        print(f"    ✓ Translation successful on attempt {attempt + 1}")
+                    return extracted_content
                 else:
-                    # If markers not found, consider this a failure
-                    print(f"    Attempt {attempt + 1}: No START/END markers found in output - translation failed")
-                    print(f"    Raw output preview: {translated_text[:100]}...")
+                    # Show detailed debug information
+                    print(f"    Attempt {attempt + 1}: Failed to extract content between START/END markers")
+                    print(f"    Raw output (first 300 chars): {translated_text[:300]}...")
+                    
+                    # Check if markers exist at all
+                    has_start = False
+                    has_end = False
+                    
+                    start_variations = ['<!-- START -->', '<!--START-->', '<!-- START-->', '<!--START -->']
+                    end_variations = ['<!-- END -->', '<!--END-->', '<!-- END-->', '<!--END -->']
+                    
+                    for var in start_variations:
+                        if var in translated_text:
+                            has_start = True
+                            print(f"    Found START marker: {var}")
+                            break
+                    
+                    for var in end_variations:
+                        if var in translated_text:
+                            has_end = True
+                            print(f"    Found END marker: {var}")
+                            break
+                    
+                    if not has_start:
+                        print(f"    No START marker found")
+                    if not has_end:
+                        print(f"    No END marker found")
+                    
+                    # Last resort: if both markers exist but extraction failed, try emergency extraction
+                    if has_start and has_end:
+                        print(f"    Attempting emergency extraction...")
+                        lines = translated_text.split('\n')
+                        start_line = -1
+                        end_line = -1
+                        
+                        for i, line in enumerate(lines):
+                            if any(marker in line for marker in start_variations):
+                                start_line = i
+                            if any(marker in line for marker in end_variations):
+                                end_line = i
+                                break
+                        
+                        if start_line != -1 and end_line != -1 and start_line < end_line:
+                            emergency_content = '\n'.join(lines[start_line+1:end_line]).strip()
+                            if emergency_content:
+                                print(f"    Emergency extraction successful")
+                                return emergency_content
+                    
                     continue  # Retry
             else:
                 error_msg = stderr.strip() if stderr else "No error message"
@@ -312,8 +388,8 @@ def parse_arguments():
     
     parser.add_argument(
         '--temp-dir',
-        default=None,
-        help="Override temp directory (auto-detected if not specified)"
+        required=True,
+        help="Temp directory path (required)"
     )
     
     parser.add_argument(
@@ -342,17 +418,10 @@ def main():
         sys.exit(1)
     
     # Find temp directory
-    if args.temp_dir:
-        temp_dir = args.temp_dir
-        if not os.path.exists(temp_dir):
-            print(f"Error: Specified temp directory not found: {temp_dir}")
-            sys.exit(1)
-    else:
-        temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp')]
-        if not temp_dirs:
-            print("Error: No temp directory found. Run 01_prepare_env.py first.")
-            sys.exit(1)
-        temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
+    temp_dir = args.temp_dir
+    if not os.path.exists(temp_dir):
+        print(f"Error: Specified temp directory not found: {temp_dir}")
+        sys.exit(1)
     
     print(f"Using temp directory: {temp_dir}")
     

@@ -94,119 +94,9 @@ def merge_markdown_files(temp_dir):
         file_size = os.path.getsize(output_file)
         print(f"Output file size: {file_size:,} bytes")
         
-        # Try using pandoc to create additional output formats
-        try_pandoc_merge(output_file, temp_dir)
-        
     except Exception as e:
         print(f"Error saving merged file: {e}")
         sys.exit(1)
-
-def try_pandoc_merge(md_file, temp_dir):
-    """Create additional output formats starting with HTML"""
-    print("Creating additional output formats...")
-    
-    import subprocess
-    
-    # First, create HTML file from markdown
-    html_file = os.path.join(temp_dir, 'output.html')
-    try:
-        print("  Creating HTML file...")
-        cmd = ['pandoc', md_file, '-o', html_file]
-        subprocess.run(cmd, check=True, capture_output=True)
-        print(f"  Created HTML: {html_file}")
-    except Exception as e:
-        print(f"  HTML creation failed: {e}")
-        return
-    
-    # Now create DOCX using html2docx.sh
-    try:
-        docx_file = os.path.join(temp_dir, 'output.docx')
-        html2docx_script = './html2docx.sh'
-        
-        if os.path.exists(html2docx_script):
-            print("  Converting HTML to DOCX...")
-            cmd = [html2docx_script, html_file, docx_file]
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"  Created DOCX: {docx_file}")
-        else:
-            print("  html2docx.sh not found, skipping DOCX creation")
-    except Exception as e:
-        print(f"  DOCX creation failed: {e}")
-    
-    # Create EPUB using html2epub.sh
-    try:
-        epub_file = os.path.join(temp_dir, 'output.epub')
-        html2epub_script = './html2epub.sh'
-        
-        if os.path.exists(html2epub_script):
-            print("  Converting HTML to EPUB...")
-            cmd = [html2epub_script, html_file, epub_file]
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"  Created EPUB: {epub_file}")
-        else:
-            print("  html2epub.sh not found, skipping EPUB creation")
-    except Exception as e:
-        print(f"  EPUB creation failed: {e}")
-    
-    # Try to create PDF output (optional)
-    try:
-        pdf_file = os.path.join(temp_dir, 'output.pdf')
-        if os.path.exists(pdf_file):
-            print(f"  Skipping PDF creation - file already exists: {pdf_file}")
-            file_size = os.path.getsize(pdf_file)
-            print(f"  Found existing PDF: {pdf_file} ({file_size:,} bytes)")
-        else:
-            print("  Creating PDF file...")
-            cmd = ['pandoc', md_file, '-o', pdf_file, '--pdf-engine=xelatex']
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"  Created PDF: {pdf_file}")
-    except:
-        print("  PDF creation failed (xelatex may not be installed)")
-
-def create_file_index(temp_dir):
-    """Create an index of processed files for reference"""
-    print("Creating file index...")
-    
-    # Find all original and translated files
-    original_files = glob.glob(os.path.join(temp_dir, 'page*.md'))
-    translated_files = glob.glob(os.path.join(temp_dir, 'output_page*.md'))
-    
-    original_files.sort(key=lambda x: natural_sort_key(os.path.basename(x)))
-    translated_files.sort(key=lambda x: natural_sort_key(os.path.basename(x)))
-    
-    index_content = "# File Processing Index\n\n"
-    index_content += f"Total original files: {len(original_files)}\n"
-    index_content += f"Total translated files: {len(translated_files)}\n\n"
-    
-    index_content += "## File List\n\n"
-    index_content += "| Original | Translated | Status |\n"
-    index_content += "|----------|------------|--------|\n"
-    
-    # Create mapping of original to translated files
-    original_map = {}
-    for orig_file in original_files:
-        base_name = os.path.basename(orig_file)
-        translated_name = f"output_{base_name}"
-        translated_path = os.path.join(temp_dir, translated_name)
-        
-        if os.path.exists(translated_path):
-            status = "✓ Translated"
-        else:
-            status = "✗ Not translated"
-        
-        index_content += f"| {base_name} | {translated_name} | {status} |\n"
-    
-    # Save index
-    index_file = os.path.join(temp_dir, 'file_index.md')
-    
-    try:
-        with open(index_file, 'w', encoding='utf-8') as f:
-            f.write(index_content)
-        
-        print(f"File index saved to: file_index.md")
-        
-    except Exception as e:
-        print(f"Error saving file index: {e}")
 
 def main():
     """Main function"""
@@ -224,12 +114,12 @@ def main():
     # Load configuration
     config = load_config(temp_dir)
     
-    # Check if output.html already exists - skip translation if it does
-    output_html = os.path.join(temp_dir, 'output.html')
-    if os.path.exists(output_html):
-        print(f"✓ Skipping translation - output.html already exists")
-        print(f"  Found existing output.html: {output_html}")
-        file_size = os.path.getsize(output_html)
+    # Check if output.md already exists - skip if it does
+    output_md = os.path.join(temp_dir, 'output.md')
+    if os.path.exists(output_md):
+        print(f"✓ Skipping merge - output.md already exists")
+        print(f"  Found existing output.md: {output_md}")
+        file_size = os.path.getsize(output_md)
         print(f"  File size: {file_size:,} bytes")
         print("\n=== Step 4 Complete ===")
         print("Next step: Run 05_md_to_html.py")
@@ -237,9 +127,6 @@ def main():
     
     # Merge markdown files
     merge_markdown_files(temp_dir)
-    
-    # Create file index
-    create_file_index(temp_dir)
     
     print("\n=== Step 4 Complete ===")
     print("Next step: Run 05_md_to_html.py")

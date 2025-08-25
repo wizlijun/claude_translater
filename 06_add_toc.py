@@ -2,11 +2,13 @@
 """
 Step 6: Generate and insert TOC (Table of Contents) into HTML
 Analyzes headings in HTML and creates a navigable TOC
+Usage: 06_add_toc.py [-o output_file]
 """
 
 import os
 import sys
 import re
+import argparse
 from pathlib import Path
 
 # Try to import BeautifulSoup, fallback to regex if not available
@@ -92,17 +94,12 @@ def generate_heading_id(text, existing_headings):
     
     return heading_id
 
-def generate_toc_html(toc_data):
-    """Generate HTML for table of contents"""
+def generate_simple_toc_html(toc_data):
+    """Generate simple HTML for table of contents (for sidebar)"""
     if not toc_data:
         return ""
     
-    toc_html = '''
-    <div id="table-of-contents">
-        <h2>目录 / Table of Contents</h2>
-        <nav class="toc-nav">
-            <ul class="toc-list">
-    '''
+    toc_html = '<ul>\n'
     
     current_level = 1
     
@@ -115,7 +112,7 @@ def generate_toc_html(toc_data):
         if level > current_level:
             # Open new nested lists
             while current_level < level:
-                toc_html += '<li><ul class="toc-list">\n'
+                toc_html += '<li><ul>\n'
                 current_level += 1
         elif level < current_level:
             # Close nested lists
@@ -131,13 +128,7 @@ def generate_toc_html(toc_data):
         toc_html += '</ul></li>\n'
         current_level -= 1
     
-    toc_html += '''
-            </ul>
-        </nav>
-    </div>
-    
-    <div class="content-separator"></div>
-    '''
+    toc_html += '</ul>\n'
     
     return toc_html
 
@@ -261,34 +252,20 @@ def insert_toc_into_html(html_file):
     
     print(f"Found {len(toc_data)} headings")
     
-    # Generate TOC HTML
-    toc_html = generate_toc_html(toc_data)
+    # Generate simple TOC HTML for sidebar
+    toc_html = generate_simple_toc_html(toc_data)
     
-    # Insert TOC styles into head
-    head = soup.find('head')
-    if head:
-        style_tag = soup.new_tag('style')
-        style_tag.string = get_toc_styles()
-        head.append(style_tag)
-    
-    # Find insertion point (after body tag or first element)
-    body = soup.find('body')
-    if body:
-        # Create TOC element
+    # Find the toc-content div and insert TOC there
+    toc_content_div = soup.find('div', class_='toc-content')
+    if toc_content_div:
+        # Clear existing content and insert new TOC
+        toc_content_div.clear()
         toc_soup = BeautifulSoup(toc_html, 'html.parser')
-        
-        # Insert TOC at the beginning of body
-        first_child = body.find()
-        if first_child:
-            first_child.insert_before(toc_soup)
-        else:
-            body.append(toc_soup)
+        toc_content_div.append(toc_soup)
+        print("✓ TOC inserted into sidebar")
     else:
-        print("Warning: No body tag found, inserting TOC at beginning of content")
-        # Insert at beginning of document
-        if soup.contents:
-            toc_soup = BeautifulSoup(toc_html, 'html.parser')
-            soup.contents[0].insert_before(toc_soup)
+        print("Warning: .toc-content div not found, TOC not inserted")
+        return False
     
     # Save updated HTML
     try:
@@ -365,13 +342,8 @@ def insert_toc_with_regex(html_file):
     
     print(f"Found {len(headings)} headings")
     
-    # Generate TOC HTML
-    toc_html = '''
-    <div id="table-of-contents">
-        <h2>目录 / Table of Contents</h2>
-        <nav class="toc-nav">
-            <ul class="toc-list">
-    '''
+    # Generate simple TOC HTML
+    toc_html = '<ul>\n'
     
     for i, (tag, text) in enumerate(headings):
         level = int(tag[1])  # Extract number from h1, h2, etc.
@@ -384,35 +356,28 @@ def insert_toc_with_regex(html_file):
         new_heading = f'<{tag} id="{heading_id}">{text}</{tag}>'
         html_content = html_content.replace(old_heading, new_heading, 1)
         
-        # Add to TOC
-        indent = "  " * (level - 1)
-        toc_html += f'{indent}<li><a href="#{heading_id}">{clean_text}</a></li>\n'
+        # Add to TOC with proper indentation
+        if level > 1:
+            for _ in range(level - 1):
+                toc_html += '  '
+        toc_html += f'<li><a href="#{heading_id}">{clean_text}</a></li>\n'
     
-    toc_html += '''
-            </ul>
-        </nav>
-    </div>
+    toc_html += '</ul>\n'
     
-    <div class="content-separator"></div>
-    '''
-    
-    # Insert TOC styles into head
-    toc_styles = get_toc_styles()
-    if '<head>' in html_content:
-        html_content = html_content.replace('<head>', f'<head>{toc_styles}', 1)
+    # Find and replace the toc-content div
+    toc_content_pattern = r'(<div[^>]*class="toc-content[^"]*"[^>]*>).*?(</div>)'
+    if re.search(toc_content_pattern, html_content, re.DOTALL):
+        # Replace content inside .toc-content div
+        html_content = re.sub(
+            toc_content_pattern,
+            r'\1' + toc_html + r'\2',
+            html_content,
+            flags=re.DOTALL
+        )
+        print("✓ TOC inserted into sidebar")
     else:
-        # If no head tag, add before body
-        if '<body>' in html_content:
-            html_content = html_content.replace('<body>', f'<head>{toc_styles}</head>\n<body>', 1)
-    
-    # Insert TOC after opening body tag
-    if '<body>' in html_content:
-        html_content = html_content.replace('<body>', f'<body>\n{toc_html}', 1)
-    elif '<div class="book-container">' in html_content:
-        html_content = html_content.replace('<div class="book-container">', f'<div class="book-container">\n{toc_html}', 1)
-    else:
-        # Fallback: add at the beginning
-        html_content = toc_html + html_content
+        print("Warning: .toc-content div not found, TOC not inserted")
+        return False
     
     # Save updated HTML
     try:
@@ -428,27 +393,69 @@ def insert_toc_with_regex(html_file):
 
 def main():
     """Main function"""
+    parser = argparse.ArgumentParser(description='Generate and insert TOC into HTML')
+    parser.add_argument('-o', '--output', help='Output HTML file path (default: use config or auto-detect)')
+    
+    args = parser.parse_args()
+    
     print("=== Book Translation Tool - Step 6: Add Table of Contents ===")
     
-    # Try to find temp directory
+    # Try to find temp directory - use the correct logic to find the right temp directory
     temp_dir = None
-    temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp')]
-    if temp_dirs:
-        temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
-        print(f"Using temp directory: {temp_dir}")
+    config_files = []
+    
+    # Check for config.txt files in temp directories
+    import glob
+    temp_dirs = glob.glob("*_temp")
+    for temp_dir_candidate in temp_dirs:
+        config_file = os.path.join(temp_dir_candidate, "config.txt")
+        if os.path.exists(config_file):
+            config_files.append((config_file, temp_dir_candidate))
+    
+    if config_files:
+        # Use the most recent config file's directory
+        _, temp_dir = max(config_files, key=lambda x: os.path.getmtime(x[0]))
+        print(f"Using temp directory from config location: {temp_dir}")
+    else:
+        print("Warning: No temp directory with config.txt found")
+        # Fall back to finding any temp directory
+        if temp_dirs:
+            temp_dir = temp_dirs[0]  # Use first found, not by modification time
+            print(f"Using fallback temp directory: {temp_dir}")
     
     # Load configuration
     config = load_config(temp_dir)
     
     # Determine HTML file path
-    html_file = config.get('output_file', 'output.html')
-    if not html_file.endswith('.html'):
-        html_file += '.html'
-    
-    # Check if HTML file exists
-    if not os.path.exists(html_file):
-        print(f"Error: HTML file '{html_file}' not found. Run 05_md_to_html.py first.")
-        sys.exit(1)
+    if args.output:
+        html_file = args.output
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(html_file)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+        
+        # Find the source HTML file to process - use book.html as the base
+        source_html = os.path.join(temp_dir, 'book.html') if temp_dir else 'book.html'
+        
+        # Check if source HTML file exists
+        if not os.path.exists(source_html):
+            print(f"Error: Source HTML file '{source_html}' not found. Run 05_md_to_html.py first.")
+            sys.exit(1)
+        
+        # Copy source to target location first if different
+        if os.path.abspath(source_html) != os.path.abspath(html_file):
+            import shutil
+            shutil.copy2(source_html, html_file)
+            print(f"Copied {source_html} to {html_file}")
+        
+    else:
+        # Use book.html in temp directory directly
+        html_file = os.path.join(temp_dir, 'book.html') if temp_dir else 'book.html'
+        
+        # Check if HTML file exists
+        if not os.path.exists(html_file):
+            print(f"Error: HTML file '{html_file}' not found. Run 05_md_to_html.py first.")
+            sys.exit(1)
     
     # Insert TOC into HTML
     success = insert_toc_into_html(html_file)
@@ -466,8 +473,8 @@ def main():
         except:
             pass
         
-        print("\n=== All Steps Complete! ===")
-        print(f"Your translated book is ready: {html_file}")
+        print("\n=== Step 6 Complete! ===")
+        print(f"Your HTML file with TOC is ready: {html_file}")
     else:
         print("Error: Failed to add TOC to HTML file")
         sys.exit(1)

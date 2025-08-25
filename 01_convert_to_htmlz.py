@@ -45,7 +45,7 @@ def convert_to_htmlz(input_file, htmlz_file, calibre_path):
             htmlz_file
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         
         if result.returncode == 0:
             file_size = os.path.getsize(htmlz_file)
@@ -266,9 +266,12 @@ def clean_calibre_markers(content):
     # 1. Remove all {.calibre...} markers
     content = re.sub(r'\{\.calibre[^}]*\}', '', content)
     
-    # 2. Remove lines starting with :::
-    # 3. Remove lines that contain only numbers (page numbers, etc.)
-    # 4. Remove lines ending with .ct} or .cn}
+    # 2. Remove all (#calibre_link-数字) patterns
+    content = re.sub(r'\(#calibre_link-\d+\)', '', content)
+    
+    # 3. Remove lines starting with :::
+    # 4. Remove lines that contain only numbers (page numbers, etc.)
+    # 5. Remove lines ending with .ct} or .cn}
     lines = content.split('\n')
     cleaned_lines = []
     
@@ -294,7 +297,7 @@ def clean_calibre_markers(content):
     # Clean up multiple consecutive newlines
     content = re.sub(r'\n{3,}', '\n\n', content)
     
-    print("✓ Calibre markers cleaned")
+    print("✓ Calibre markers cleaned (including calibre_link patterns)")
     return content
 
 def split_markdown_by_size(md_file, temp_dir, target_size=6000):
@@ -345,7 +348,7 @@ def split_markdown_by_size(md_file, temp_dir, target_size=6000):
         print(f"✗ Error splitting markdown: {e}")
         return 0
 
-def create_config_file(temp_dir, input_file, input_lang, output_lang, output_file, metadata=None):
+def create_config_file(temp_dir, input_file, input_lang, output_lang, metadata=None):
     """Create config.txt file for the pipeline"""
     try:
         config_file = os.path.join(temp_dir, "config.txt")
@@ -354,7 +357,6 @@ def create_config_file(temp_dir, input_file, input_lang, output_lang, output_fil
 input_file={input_file}
 input_lang={input_lang}
 output_lang={output_lang}
-output_file={output_file}
 conversion_method=calibre_htmlz
 """
         
@@ -388,7 +390,6 @@ def main():
     parser.add_argument("input_file", help="Input file (PDF, DOCX, or EPUB)")
     parser.add_argument("-l", "--ilang", default="auto", help="Input language (default: auto)")
     parser.add_argument("--olang", default="zh", help="Output language (default: zh)")
-    parser.add_argument("-o", "--output", default="output.html", help="Output file (default: output.html)")
     parser.add_argument("--chunk-size", type=int, default=6000, help="Target chunk size in characters (default: 6000)")
     
     args = parser.parse_args()
@@ -476,7 +477,7 @@ def main():
                     sys.exit(1)
             
             # Step 6: Create config file
-            create_config_file(temp_dir, input_file, args.ilang, args.olang, args.output, metadata)
+            create_config_file(temp_dir, input_file, args.ilang, args.olang, metadata)
             
             print("\n" + "="*50)
             print("✓ Conversion completed successfully!")
@@ -524,7 +525,7 @@ def main():
                     sys.exit(1)
             
             # Step 6: Create config file
-            create_config_file(temp_dir, input_file, args.ilang, args.olang, args.output, metadata)
+            create_config_file(temp_dir, input_file, args.ilang, args.olang, metadata)
             
             print("\n" + "="*50)
             print("✓ Conversion completed successfully!")

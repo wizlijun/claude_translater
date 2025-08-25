@@ -539,7 +539,10 @@ main() {
                         source "$venv_dir/bin/activate"
                     fi
                     
-                    local cmd="python3 ${SCRIPT_DIR}/${step_scripts[2]} -p \"$CUSTOM_PROMPT\""
+                    # Use input file name to determine temp directory
+                    local base_temp_dir="${INPUT_FILE%.*}_temp"
+                    
+                    local cmd="python3 ${SCRIPT_DIR}/${step_scripts[2]} --temp-dir \"$base_temp_dir\" -p \"$CUSTOM_PROMPT\""
                     
                     if [[ "$VERBOSE" == true ]]; then
                         log_info "Executing: $cmd"
@@ -589,7 +592,38 @@ main() {
                     log_success "Step 6 completed: ${step_descriptions[5]} -> ${base_temp_dir}/book.html"
                 fi
             else
-                execute_python_script "${step_scripts[$((i-1))]}" "$i" "${step_descriptions[$((i-1))]}"
+                # Special handling for step 3 (translation) to pass temp directory
+                if [[ $i -eq 3 ]]; then
+                    log_step "3" "${step_descriptions[2]}"
+                    
+                    if [[ "$DRY_RUN" == true ]]; then
+                        log_info "[DRY RUN] Would execute: python3 ${step_scripts[2]}"
+                    else
+                        # Ensure virtual environment is activated before running Python scripts
+                        local venv_dir="${SCRIPT_DIR}/venv"
+                        if [[ -d "$venv_dir" ]]; then
+                            source "$venv_dir/bin/activate"
+                        fi
+                        
+                        # Use input file name to determine temp directory
+                        local base_temp_dir="${INPUT_FILE%.*}_temp"
+                        
+                        local cmd="python3 ${SCRIPT_DIR}/${step_scripts[2]} --temp-dir \"$base_temp_dir\""
+                        
+                        if [[ "$VERBOSE" == true ]]; then
+                            log_info "Executing: $cmd"
+                        fi
+                        
+                        if ! eval $cmd; then
+                            log_error "Step 3 failed: ${step_descriptions[2]}"
+                            exit 1
+                        fi
+                        
+                        log_success "Step 3 completed: ${step_descriptions[2]}"
+                    fi
+                else
+                    execute_python_script "${step_scripts[$((i-1))]}" "$i" "${step_descriptions[$((i-1))]}"
+                fi
             fi
         fi
     done

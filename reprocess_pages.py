@@ -17,8 +17,9 @@ def main():
         from 02_split_to_md import split_pdf_with_pymupdf
         
         # Process just a few pages to test
-        temp_dir = os.path.join(current_dir, "temp")
         input_file = os.path.join(current_dir, "input.pdf")
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        temp_dir = f"{base_name}_temp"
         
         print("Testing improved PDF extraction...")
         

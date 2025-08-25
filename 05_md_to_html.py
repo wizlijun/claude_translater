@@ -19,6 +19,112 @@ try:
 except ImportError:
     MARKDOWN_AVAILABLE = False
 
+def translate_title_with_claude(title, target_lang, custom_prompt=None):
+    """Translate book title using Claude CLI"""
+    if not title or not title.strip():
+        return "翻译书籍"  # Default fallback
+    
+    try:
+        print(f"Translating title '{title}' to {target_lang}...")
+        
+        # Create translation prompt
+        lang_map = {
+            'zh': 'Chinese',
+            'en': 'English', 
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'fr': 'French',
+            'de': 'German',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian'
+        }
+        
+        target_lang_name = lang_map.get(target_lang.lower(), target_lang)
+        
+        prompt = f"""Please translate this book title to {target_lang_name}. 
+CRITICAL OUTPUT FORMAT: You must strictly follow this format:
+- First line must be: <!-- START -->
+- Then the translated title (only the title, nothing else)
+- Last line must be: <!-- END -->
+- Do not add any explanations, warnings, code block markers, or other content
+- Absolutely do not output any markdown code block markers (like ```markdown or ```)
+- Do not output any explanatory text or metadata
+- Strictly follow the format: <!-- START -->[translated title]<!-- END -->
+
+Title: {title}"""
+
+        if custom_prompt:
+            prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_prompt}"
+        
+        # Run Claude CLI
+        process = subprocess.Popen(
+            ['claude'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        stdout, stderr = process.communicate(input=prompt, timeout=30)
+        
+        if process.returncode == 0 and stdout.strip():
+            # Extract content between START and END markers
+            def extract_title_from_markers(text):
+                """Extract title content between START and END markers"""
+                start_marker = '<!-- START -->'
+                end_marker = '<!-- END -->'
+                
+                # Find the positions of markers
+                start_pos = text.find(start_marker)
+                end_pos = text.find(end_marker)
+                
+                if start_pos == -1:
+                    # Try to find markers with variations
+                    for variation in ['<!--START-->', '<!-- START-->', '<!--START -->', '<!-- START-->']:
+                        start_pos = text.find(variation)
+                        if start_pos != -1:
+                            start_marker = variation
+                            break
+                
+                if end_pos == -1:
+                    # Try to find markers with variations
+                    for variation in ['<!--END-->', '<!-- END-->', '<!--END -->', '<!-- END-->']:
+                        end_pos = text.find(variation)
+                        if end_pos != -1:
+                            end_marker = variation
+                            break
+                
+                if start_pos != -1 and end_pos != -1 and start_pos < end_pos:
+                    # Extract content between markers
+                    content_start = start_pos + len(start_marker)
+                    extracted = text[content_start:end_pos].strip()
+                    return extracted
+                
+                return None
+            
+            raw_output = stdout.strip()
+            translated_title = extract_title_from_markers(raw_output)
+            
+            if translated_title:
+                # Clean up any formatting markers
+                translated_title = translated_title.replace('**', '').replace('*', '').strip()
+                print(f"✓ Title translated: '{title}' -> '{translated_title}'")
+                return translated_title
+            else:
+                print(f"Warning: Failed to extract title from markers. Raw output: {raw_output[:100]}...")
+                print(f"Using original title: {title}")
+                return title
+        else:
+            print(f"Warning: Title translation failed, using original: {stderr}")
+            return title
+            
+    except Exception as e:
+        print(f"Warning: Error translating title: {e}, using original")
+        return title
+
 def load_config(temp_dir):
     """Load configuration from step 1"""
     config_file = os.path.join(temp_dir, 'config.txt')
@@ -43,36 +149,86 @@ def check_pandoc_available():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
-def convert_with_pandoc(md_file, html_file, template_file=None):
+def convert_with_pandoc(md_file, html_file, template_file=None, title="翻译书籍"):
     """Convert markdown to HTML using pandoc"""
     print("Converting markdown to HTML using pandoc...")
     
     cmd = ['pandoc', md_file, '-o', html_file]
     
+    # Use template if available
     if template_file and os.path.exists(template_file):
         cmd.extend(['--template', template_file])
+        print(f"  Using template: {template_file}")
     
     # Add useful pandoc options
     cmd.extend([
         '--standalone',
-        '--self-contained',
-        '--metadata', 'title=Translated Book',
-        '--css', 'style.css' if os.path.exists('style.css') else ''
+        '--metadata', f'title={title}',
+        '--metadata', 'lang=zh-CN',
+        '--from', 'markdown+smart+east_asian_line_breaks',
+        '--to', 'html5'
     ])
     
     try:
+        print(f"  Running: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         print("✓ Successfully converted with pandoc")
+        
+        # Verify output file was created
+        if os.path.exists(html_file):
+            file_size = os.path.getsize(html_file)
+            print(f"  Output file: {html_file} ({file_size:,} bytes)")
+        
         return True
     except subprocess.CalledProcessError as e:
         print(f"✗ Pandoc conversion failed: {e.stderr}")
+        if e.stdout:
+            print(f"  Stdout: {e.stdout}")
         return False
 
-def convert_with_python_markdown(md_file, html_file, template_file=None):
-    """Convert markdown to HTML using python-markdown"""
-    if not MARKDOWN_AVAILABLE:
-        print("python-markdown not available, using basic conversion...")
-        return convert_with_basic_markdown(md_file, html_file, template_file)
+def apply_template_to_html(html_content, template_file, output_file, title="翻译书籍"):
+    """Apply a template to HTML content and save to output file"""
+    if not template_file or not os.path.exists(template_file):
+        print(f"Warning: Template {template_file} not found, using default template")
+        full_html = create_default_html(html_content, title)
+    else:
+        try:
+            with open(template_file, 'r', encoding='utf-8') as f:
+                template_content = f.read()
+            
+            # Replace placeholder with content
+            if '$body$' in template_content:
+                full_html = template_content.replace('$body$', html_content)
+            elif '{{content}}' in template_content:
+                full_html = template_content.replace('{{content}}', html_content)
+            elif '{content}' in template_content:
+                full_html = template_content.replace('{content}', html_content)
+            else:
+                # If no placeholder found, insert before </body>
+                if '</body>' in template_content:
+                    full_html = template_content.replace('</body>', f'{html_content}\n</body>')
+                else:
+                    full_html = template_content + html_content
+                    
+            # Handle title placeholder
+            if '$title$' in full_html:
+                full_html = full_html.replace('$title$', title)
+                
+        except Exception as e:
+            print(f"Error reading template {template_file}: {e}")
+            full_html = create_default_html(html_content, title)
+    
+    # Save HTML file
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(full_html)
+        print(f"✓ HTML file created with template: {output_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving HTML file {output_file}: {e}")
+        return False
+
+def convert_with_python_markdown(md_file, html_file, template_file=None, title="翻译书籍"):
     
     print("Converting markdown to HTML using python-markdown...")
     
@@ -110,6 +266,8 @@ def convert_with_python_markdown(md_file, html_file, template_file=None):
                 full_html = template_content.replace('{{content}}', html_content)
             elif '{content}' in template_content:
                 full_html = template_content.replace('{content}', html_content)
+            elif '$body$' in template_content:
+                full_html = template_content.replace('$body$', html_content)
             else:
                 # If no placeholder found, insert before </body>
                 if '</body>' in template_content:
@@ -118,7 +276,7 @@ def convert_with_python_markdown(md_file, html_file, template_file=None):
                     full_html = template_content + html_content
         except Exception as e:
             print(f"Error reading template: {e}")
-            full_html = create_default_html(html_content)
+            full_html = create_default_html(html_content, title)
     else:
         full_html = create_default_html(html_content)
     
@@ -209,6 +367,8 @@ def convert_with_basic_markdown(md_file, html_file, template_file=None):
                 full_html = template_content.replace('{{content}}', html_content)
             elif '{content}' in template_content:
                 full_html = template_content.replace('{content}', html_content)
+            elif '$body$' in template_content:
+                full_html = template_content.replace('$body$', html_content)
             else:
                 # If no placeholder found, insert before </body>
                 if '</body>' in template_content:
@@ -217,7 +377,7 @@ def convert_with_basic_markdown(md_file, html_file, template_file=None):
                     full_html = template_content + html_content
         except Exception as e:
             print(f"Error reading template: {e}")
-            full_html = create_default_html(html_content)
+            full_html = create_default_html(html_content, title)
     else:
         full_html = create_default_html(html_content)
     
@@ -232,14 +392,14 @@ def convert_with_basic_markdown(md_file, html_file, template_file=None):
         print(f"Error saving HTML file: {e}")
         return False
 
-def create_default_html(content):
+def create_default_html(content, title="翻译书籍"):
     """Create default HTML template"""
     return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Translated Book</title>
+    <title>{title}</title>
     <style>
         body {{
             max-width: 800px;
@@ -420,7 +580,21 @@ def main():
     
     # Load configuration
     config = load_config(temp_dir)
-    output_file = config['output_file']
+    
+    # Translate book title if available
+    original_title = config.get('original_title', '')
+    output_lang = config.get('output_lang', 'zh')
+    custom_prompt = config.get('custom_prompt', None)
+    translated_title = "翻译书籍"  # Default fallback
+    
+    if original_title:
+        translated_title = translate_title_with_claude(original_title, output_lang, custom_prompt)
+        # Add book title marks (书名号) for Chinese titles
+        if output_lang == 'zh':
+            translated_title = f"《{translated_title}》"
+        print(f"Using translated title: {translated_title}")
+    else:
+        print("No original title found in config, using default title")
     
     # Check if output.md exists
     md_file = os.path.join(temp_dir, 'output.md')
@@ -428,46 +602,67 @@ def main():
         print("Error: output.md not found. Run 04_merge_md.py first.")
         sys.exit(1)
     
-    # Determine output HTML file path
-    html_file = output_file
-    if not html_file.endswith('.html'):
-        html_file += '.html'
-    
-    # Check for template file
-    template_file = 'template.html'
-    if not os.path.exists(template_file):
-        template_file = None
-        print("No template.html found, using default template")
-    else:
-        print(f"Using template: {template_file}")
+    # Generate output.html in the temp directory first (without template)
+    temp_html_file = os.path.join(temp_dir, 'output.html')
     
     # Try pandoc first, then fallback to python-markdown
     success = False
     
     if check_pandoc_available():
-        success = convert_with_pandoc(md_file, html_file, template_file)
+        success = convert_with_pandoc(md_file, temp_html_file, None, translated_title)  # No template for raw HTML
     
     if not success:
         print("Pandoc not available or failed, trying python-markdown...")
-        success = convert_with_python_markdown(md_file, html_file, template_file)
+        success = convert_with_python_markdown(md_file, temp_html_file, None, translated_title)  # No template for raw HTML
     
     if not success:
         print("Error: Failed to convert markdown to HTML")
         sys.exit(1)
     
-    # Copy images to output directory
-    output_dir = os.path.dirname(html_file) or '.'
-    copy_images_to_output(temp_dir, output_dir)
+    # Copy images to temp directory
+    copy_images_to_output(temp_dir, temp_dir)
     
     # Process HTML separators
-    process_html_separators(html_file)
+    process_html_separators(temp_html_file)
     
-    print(f"\n✓ HTML file created: {html_file}")
-    
-    # Show file size
+    # Read the raw HTML content
     try:
-        file_size = os.path.getsize(html_file)
-        print(f"Output file size: {file_size:,} bytes")
+        with open(temp_html_file, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+    except Exception as e:
+        print(f"Error reading HTML file: {e}")
+        sys.exit(1)
+    
+    # Extract only the body content from the HTML
+    import re
+    body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.DOTALL | re.IGNORECASE)
+    if body_match:
+        body_content = body_match.group(1).strip()
+    else:
+        # If no body tag found, use the entire content
+        body_content = html_content
+    
+    # Generate book_doc.html with template_ebook.html template
+    book_doc_file = os.path.join(temp_dir, 'book_doc.html')
+    template_ebook_file = 'template_ebook.html'
+    apply_template_to_html(body_content, template_ebook_file, book_doc_file, translated_title)
+    
+    # Generate book.html with template.html template
+    book_file = os.path.join(temp_dir, 'book.html')
+    template_file = 'template.html'
+    apply_template_to_html(body_content, template_file, book_file, translated_title)
+    
+    print(f"\n✓ Generated HTML files:")
+    print(f"  - Raw HTML: {temp_html_file}")
+    print(f"  - eBook template: {book_doc_file}")
+    print(f"  - Web template: {book_file}")
+    
+    # Show file sizes
+    try:
+        for file_path in [temp_html_file, book_doc_file, book_file]:
+            if os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                print(f"  {os.path.basename(file_path)}: {file_size:,} bytes")
     except:
         pass
     
