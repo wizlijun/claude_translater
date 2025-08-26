@@ -2,11 +2,17 @@
 
 这是一个基于 Claude AI 的文档翻译工具集，支持多种文档格式的批量翻译。
 
-[![Version](https://img.shields.io/badge/version-v2.0-blue.svg)](https://github.com/your-username/claude_translater)
+[![Version](https://img.shields.io/badge/version-v2.1-blue.svg)](https://github.com/your-username/claude_translater)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.6+-blue.svg)](https://python.org)
 
-## 🎯 最新重大更新 v2.0
+## 🎯 最新重大更新 v2.1
+
+### 管道优化 - Temp目录一致性修复
+- **修复**: Step 4 和 Step 5 temp目录查找逻辑错误
+- **优化**: 确保所有步骤使用一致的temp目录传递机制
+- **增强**: 改进多项目并行处理时的目录识别
+- **稳定**: 提高在多个temp目录并存时的可靠性
 
 ### 统一转换架构 - Calibre HTMLZ 方案
 - **新增**: `01_convert_to_htmlz.py` - 统一文件转换脚本
@@ -73,6 +79,7 @@ brew install --cask calibre  # macOS
   - 去除 `.ct}` `.cn}` 结尾的行
 - **7步流程**: 转换 → 翻译 → 合并 → HTML → 目录 → 格式转换
 - **跳过优化**: 新架构下自动跳过步骤1-2，直接进入翻译
+- **目录精确**: 每个步骤使用正确的temp目录，支持多项目并行
 
 ### 新转换引擎 (01_convert_to_htmlz.py)
 - **Calibre集成**: 使用 `ebook-convert` 命令行工具
@@ -175,6 +182,27 @@ pypandoc → input.md → 内容清理 → 智能分块
 page0001.md ~ page0042.md → Claude翻译 → 合并 → HTML → 目录 → 输出
 ```
 
+### 3. Temp目录管理机制 (v2.1新增)
+```
+输入文件: book.pdf
+    ↓
+创建目录: book_temp/
+    ├── config.txt          # 配置文件，记录输入文件名
+    ├── input.html          # 转换后的HTML
+    ├── input.md           # 转换后的Markdown
+    ├── page0001.md        # 分块文件
+    ├── output_page0001.md # 翻译后文件
+    ├── output.md          # 合并后翻译
+    ├── book.html          # 最终HTML输出
+    └── images/            # 图片目录
+```
+
+**智能目录选择**：
+- 基于`config.txt`中的`input_file`字段匹配对应的输入文件
+- 验证temp目录名称格式：`{filename}_temp`
+- 支持多项目并行：每个输入文件创建独立的temp目录
+- 自动处理多个temp目录并存的情况
+
 ## 清理优化详情
 
 ### 自动清理规则
@@ -221,6 +249,8 @@ page0001.md ~ page0042.md → Claude翻译 → 合并 → HTML → 目录 → �
 | pypandoc缺失 | `pip install pypandoc` |
 | 转换失败 | 检查文件格式和Calibre版本 |
 | 权限问题 | 确保脚本有执行权限：`chmod +x translatebook.sh` |
+| temp目录错误 | v2.1已修复，确保使用最新版本 |
+| 多项目冲突 | 每个项目都会创建独立的`{filename}_temp`目录 |
 
 ### 调试建议
 ```bash
@@ -252,7 +282,14 @@ python3 -c "import pypandoc; print('pypandoc OK')"  # 检查pypandoc
 
 ## 版本历史
 
-### v2.0 (当前版本) - 2025年7月更新
+### v2.1 (当前版本) - 2025年8月更新
+- 🔧 修复Step 4和Step 5的temp目录查找逻辑
+- 🎯 确保所有步骤使用一致的temp目录传递机制
+- 🔄 增强多项目并行处理支持
+- ⚡ 提高在多个temp目录并存时的可靠性
+- 📦 添加`--temp-dir`参数支持各个步骤
+
+### v2.0 - 2025年7月更新
 - ✨ 新增 Calibre HTMLZ 统一转换架构
 - 🚀 解决PDF转MD乱码问题
 - 🖼️ 完整保留图片和排版
@@ -268,10 +305,11 @@ python3 -c "import pypandoc; print('pypandoc OK')"  # 检查pypandoc
 
 ## 项目状态
 
-📅 **最后更新**: 2025年7月  
+📅 **最后更新**: 2025年8月  
 ✅ **状态**: 活跃开发中  
-🔄 **架构**: v2.0 Calibre HTMLZ 统一转换  
+🔄 **架构**: v2.1 Calibre HTMLZ 统一转换 + 管道优化  
 🎯 **主要功能**: PDF/DOCX/EPUB → 中文翻译 → HTML输出  
+🔧 **最新改进**: 修复temp目录逻辑，支持多项目并行  
 
 ## 🤝 贡献指南
 

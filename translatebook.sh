@@ -621,6 +621,66 @@ main() {
                         
                         log_success "Step 3 completed: ${step_descriptions[2]}"
                     fi
+                elif [[ $i -eq 4 ]]; then
+                    # Special handling for step 4 (merge) to pass temp directory
+                    log_step "4" "${step_descriptions[3]}"
+                    
+                    if [[ "$DRY_RUN" == true ]]; then
+                        local base_temp_dir="${INPUT_FILE%.*}_temp"
+                        log_info "[DRY RUN] Would execute: python3 ${step_scripts[3]} --temp-dir \"$base_temp_dir\""
+                    else
+                        # Ensure virtual environment is activated before running Python scripts
+                        local venv_dir="${SCRIPT_DIR}/venv"
+                        if [[ -d "$venv_dir" ]]; then
+                            source "$venv_dir/bin/activate"
+                        fi
+                        
+                        # Use input file name to determine temp directory
+                        local base_temp_dir="${INPUT_FILE%.*}_temp"
+                        
+                        local cmd="python3 ${SCRIPT_DIR}/${step_scripts[3]} --temp-dir \"$base_temp_dir\""
+                        
+                        if [[ "$VERBOSE" == true ]]; then
+                            log_info "Executing: $cmd"
+                        fi
+                        
+                        if ! eval $cmd; then
+                            log_error "Step 4 failed: ${step_descriptions[3]}"
+                            exit 1
+                        fi
+                        
+                        log_success "Step 4 completed: ${step_descriptions[3]}"
+                    fi
+                elif [[ $i -eq 5 ]]; then
+                    # Special handling for step 5 (md to html) to pass temp directory
+                    log_step "5" "${step_descriptions[4]}"
+                    
+                    if [[ "$DRY_RUN" == true ]]; then
+                        local base_temp_dir="${INPUT_FILE%.*}_temp"
+                        log_info "[DRY RUN] Would execute: python3 ${step_scripts[4]} --temp-dir \"$base_temp_dir\""
+                    else
+                        # Ensure virtual environment is activated before running Python scripts
+                        local venv_dir="${SCRIPT_DIR}/venv"
+                        if [[ -d "$venv_dir" ]]; then
+                            source "$venv_dir/bin/activate"
+                        fi
+                        
+                        # Use input file name to determine temp directory
+                        local base_temp_dir="${INPUT_FILE%.*}_temp"
+                        
+                        local cmd="python3 ${SCRIPT_DIR}/${step_scripts[4]} --temp-dir \"$base_temp_dir\""
+                        
+                        if [[ "$VERBOSE" == true ]]; then
+                            log_info "Executing: $cmd"
+                        fi
+                        
+                        if ! eval $cmd; then
+                            log_error "Step 5 failed: ${step_descriptions[4]}"
+                            exit 1
+                        fi
+                        
+                        log_success "Step 5 completed: ${step_descriptions[4]}"
+                    fi
                 else
                     execute_python_script "${step_scripts[$((i-1))]}" "$i" "${step_descriptions[$((i-1))]}"
                 fi

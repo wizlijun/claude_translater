@@ -8,6 +8,7 @@ import os
 import sys
 import glob
 import re
+import argparse
 from pathlib import Path
 
 def load_config(temp_dir):
@@ -98,17 +99,82 @@ def merge_markdown_files(temp_dir):
         print(f"Error saving merged file: {e}")
         sys.exit(1)
 
+def find_valid_temp_dir():
+    """Find a valid temp directory with required files"""
+    # Find all directories ending with _temp
+    potential_dirs = [d for d in os.listdir('.') if d.endswith('_temp') and os.path.isdir(d)]
+    
+    if not potential_dirs:
+        return None
+    
+    # Filter to only directories that contain config.txt
+    valid_dirs = []
+    for d in potential_dirs:
+        config_file = os.path.join(d, 'config.txt')
+        if os.path.exists(config_file):
+            valid_dirs.append(d)
+    
+    if not valid_dirs:
+        return None
+    
+    # If there's only one valid directory, use it
+    if len(valid_dirs) == 1:
+        return valid_dirs[0]
+    
+    # If there are multiple valid directories, try to find the right one
+    # First, try to match based on input files that exist in current directory
+    current_files = os.listdir('.')
+    for d in valid_dirs:
+        try:
+            # Read config to get input file
+            config_file = os.path.join(d, 'config.txt')
+            with open(config_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith('input_file='):
+                        input_file = line.strip().split('=', 1)[1]
+                        # Check if this input file exists in current directory
+                        if input_file in current_files:
+                            # Also verify the temp directory name matches the input file
+                            expected_temp_dir = f"{os.path.splitext(input_file)[0]}_temp"
+                            if d == expected_temp_dir:
+                                return d
+        except Exception:
+            continue
+    
+    # If no exact match found, return the most recently modified valid directory
+    return max(valid_dirs, key=lambda d: os.path.getmtime(d))
+
 def main():
     """Main function"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Step 4: Merge translated markdown files')
+    parser.add_argument('--temp-dir', help='Specify temp directory to use')
+    args = parser.parse_args()
+    
     print("=== Book Translation Tool - Step 4: Merge Markdown ===")
     
-    # Find temp directory
-    temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp')]
-    if not temp_dirs:
-        print("Error: No temp directory found. Run 01_prepare_env.py first.")
-        sys.exit(1)
+    # Use specified temp directory or find one automatically
+    if args.temp_dir:
+        temp_dir = args.temp_dir
+        if not os.path.isdir(temp_dir):
+            print(f"Error: Specified temp directory does not exist: {temp_dir}")
+            sys.exit(1)
+        if not os.path.exists(os.path.join(temp_dir, 'config.txt')):
+            print(f"Error: Specified temp directory does not contain config.txt: {temp_dir}")
+            sys.exit(1)
+    else:
+        # Find temp directory automatically
+        temp_dir = find_valid_temp_dir()
+        if not temp_dir:
+            print("Error: No valid temp directory found. Run 01_prepare_env.py first.")
+            print("Looking for directories ending with '_temp' that contain 'config.txt'")
+            # List available temp directories for debugging
+            temp_dirs = [d for d in os.listdir('.') if d.endswith('_temp') and os.path.isdir(d)]
+            if temp_dirs:
+                print(f"Found {len(temp_dirs)} temp directories: {', '.join(temp_dirs)}")
+                print("But none contain a valid config.txt file.")
+            sys.exit(1)
     
-    temp_dir = max(temp_dirs, key=lambda d: os.path.getmtime(d))
     print(f"Using temp directory: {temp_dir}")
     
     # Load configuration
